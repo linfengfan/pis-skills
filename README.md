@@ -1,1 +1,1 @@
-自己的skills集合
+skills集合
