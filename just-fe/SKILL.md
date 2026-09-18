@@ -105,8 +105,9 @@ description: 当用户要开发前端功能、进行需求分析、方案评审�
 
 ### 代码架构Review
 - 对开发完成代码进行架构Review
-- 七维度打分
+- 七维度并行打分：逻辑正确性 25 / 健壮性 20 / 架构 15 / 类型安全 10 / 规范 10 / 安全与可访问性 10 / 爆炸半径 10
 - **<80分 → 打回开发agent重新做**
+- **任一 🔴 致命问题 → 一票否决，不看总分**（97 分带一个密钥硬编码也不予通过）
 
 ## Workflow 脚本清单
 
@@ -117,8 +118,10 @@ description: 当用户要开发前端功能、进行需求分析、方案评审�
 | 方案评审 | `scripts/architecture-review-workflow.js` | 六维度打分，80分红线 |
 | 页面UI开发 | `scripts/ui-implementation-workflow.js` | 基于Figma开发UI |
 | 接口联调 | `scripts/api-integration-workflow.js` | 产出清单 + 联调开发 |
-| 代码架构Review | `scripts/code-arch-review-workflow.js` | 七维度打分，80分红线 |
+| 代码架构Review | `scripts/code-arch-review-workflow.js` | 七维度并行打分，80分红线 + 致命一票否决 |
 | 测试评估 | `scripts/test-assessment-workflow.js` | 五维度打分，80分红线 |
+
+每个脚本都是**自包含单文件**：Workflow 运行时在隔离环境执行，不提供文件系统访问，因此脚本内不能出现 `import`，prompt 与 schema 一律内联。新增或修改脚本时必须守住这条，否则装到 `~/.claude/workflows/` 后会在模块解析阶段直接失败。
 
 ## 产物落盘
 
@@ -143,7 +146,10 @@ fe-reports/{需求}/
 **铁律**:
 - 方案评审 < 80分 → 打回重写（最多3轮）
 - 代码架构Review < 80分 → 打回开发agent（最多2轮）
+- 代码架构Review 出现任一 🔴 致命问题 → **一票否决，与总分无关**
 - 测试评估 < 80分 → 打回架构和开发（最多2轮）
+
+打分口径统一见 `templates/评分协议.md`。反向铁律同样成立：**找不到真实问题时必须如实给高分**，禁止为了显得严格而编造扣分项。
 
 ## 编排纪律
 
@@ -163,53 +169,74 @@ fe-reports/{需求}/
 | ④UI开发 | ③方案评审必须 ≥80分 |
 | ⑤接口联调 | ④UI开发必须完成 |
 | ⑥代码Review | ⑤接口联调必须完成 |
-| ⑦测试评估 | ⑥代码Review必须 ≥80分 |
+| ⑦测试评估 | ⑥代码Review必须 ≥80分**且无 🔴 致命问题** |
 | ⑧完成 | ⑦测试评估必须 ≥80分 |
 
 ---
 
 ## Workflow 编排入口
 
-### 完整流程编排
+**没有总编排脚本。** 编排由本 Skill（即你，读到这里的模型）承担：按阶段顺序依次调用下表的 7 个 Workflow，每次调用前从磁盘读取上游产物作为入参，调用后把产物落盘。Workflow 之间不能互相调用，所以串联、打回重试、轮次计数都由你在阶段之间完成。
+
+### 阶段编排表
+
+| 阶段 | Workflow 名称 | 关键入参 | 返回值判读 |
+|------|---------------|----------|-----------|
+| ①需求梳理 | `fe-triage` | `requirement`, `projectContext` | `status==='blocked'` 则停止并向用户提问 |
+| ②方案架构 | `fe-architecture` | `requirement`, `requirementAnalysis`, `projectContext` | `status==='needs_clarification'` 则回①补齐 |
+| ③方案评审 | `fe-architecture-review` | `architecture`, `profile`, `round` | `passed===false` 则带 `issues` 回②重写，`round+1` |
+| ④UI开发 | `fe-ui-implementation` | `requirement`, `figmaUrl`, `taskCards` | `blockReason` 非空则停止 |
+| ⑤接口联调 | `fe-api-integration` | `requirement`, `architecture`, `uiCompleted` | `status==='awaiting_apis'` 则等接口就绪 |
+| ⑥代码Review | `fe-code-arch-review` | `requirement`, `changeScope`, `projectContext`, `round` | `passed===false` 则带 `criticalIssues` 回④⑤，`round+1` |
+| ⑦测试评估 | `fe-test-assessment` | `requirement`, `acceptanceCriteria`, `changeScope`, `round` | `passed===false` 则回②④⑤，`round+1` |
+
+单阶段调用形态：
 
 ```javascript
-// 完整流程：从需求到完成
-const result = await workflow('just-fe-main', {
-  requirement: '需求描述',
-  projectPath: '/path/to/project',  // 可选
-  figmaUrl: 'https://figma.com/...', // 可选
+const result = await workflow('fe-architecture-review', {
+  architecture: '<architecture-{日期}.md 全文>',
+  profile: '<.claude/fe-profile.md 全文>',
+  round: 1,
 })
+// result.passed / result.finalScore / result.issues / result.report
 ```
 
-### 阶段编排
+### 完整流程的编排步骤
 
-| 阶段 | Workflow 名称 | 输入 | 输出 |
-|------|---------------|------|------|
-| ①需求梳理 | `fe-triage` | requirement, projectPath | triage report |
-| ②方案架构 | `fe-architecture` | requirement, triageResult | architecture report |
-| ③方案评审 | `fe-architecture-review` | architecture, round | review report |
-| ④UI开发 | `fe-ui-implementation` | requirement, figmaUrl, taskCards | UI report |
-| ⑤接口联调 | `fe-api-integration` | requirement, uiCompleted | api list + integration report |
-| ⑥代码Review | `fe-code-arch-review` | requirement, changeScope | review report |
-| ⑦测试评估 | `fe-test-assessment` | requirement, changeScope | assessment report |
+1. 读 `.claude/fe-profile.md`；不存在则先按 `references/项目画像初始化.md` 生成，产出格式见 `templates/项目画像模板.md`
+2. 在 `fe-reports/{需求}/` 下用 `MEMORY.md` 建流程状态（模板即本目录的 `MEMORY.md`）
+3. 依次执行①~⑦，**每个阶段结束立刻把 `result.report` 落盘并更新 `MEMORY.md`**
+4. 遇到 `passed===false`：把 `issues` / `criticalIssues` 原文带回打回目标阶段，轮次 +1；达轮次上限则停下来交人工
+5. ⑦通过后按 `templates/变更日志模板.md` 写 `change-{日期}.md`，再 commit
 
-### 续接编排
+### 续接与断点恢复
 
-```javascript
-// 从指定阶段续接
-const result = await workflow('just-fe-resume', {
-  from: ⑤,  // 从接口联调开始
-  requirement: '商品详情页',
-  projectPath: '/path/to/project',
-})
+同样没有 resume 脚本，按以下步骤手工续接：
+
+1. 读 `fe-reports/{需求}/MEMORY.md` 定位中断阶段与已完成轮次
+2. 按「产物查找规则」表逐个确认前置产物是否存在且完整
+3. 把已有产物读成字符串，作为目标阶段 Workflow 的入参
+4. 从目标阶段继续执行，不重跑已通过的阶段，不重问已澄清的维度
+
+```
+/just-fe --from=⑥                    # 读①~⑤产物 → 直接调 fe-code-arch-review
+/just-fe --from=⑤ --需求="商品详情页"   # 读①~④产物 → 直接调 fe-api-integration
+/just-fe --resume                    # 读 MEMORY.md 定位断点后按上述步骤续接
 ```
 
-### 断点恢复
+---
 
-```javascript
-// 恢复中断的流程
-const result = await workflow('just-fe-resume', {
-  resume: true,
-  projectPath: '/path/to/project',
-})
-```
+## 配套资源
+
+阶段执行时按需读取，不要凭记忆编造格式：
+
+| 资源 | 何时读 |
+|------|--------|
+| `templates/项目画像模板.md` | 生成 `.claude/fe-profile.md` 时 |
+| `templates/需求梳理报告模板.md` | ①落盘 `triage-{日期}.md` 时 |
+| `templates/架构方案模板.md` | ②落盘 `architecture-{日期}.md` 时 |
+| `templates/评分协议.md` | ③⑥⑦打分前，统一扣分口径 |
+| `templates/变更日志模板.md` | ⑧落盘 `change-{日期}.md` 时 |
+| `references/项目画像初始化.md` | 项目画像缺失，需要探测技术栈与门禁命令时 |
+| `references/需求分诊.md` | ①需要六维度澄清清单与六关筛选口径时 |
+| `references/前端功能团队.md` | 中大型改动想用四角色并行分析加强②时（可选增强） |

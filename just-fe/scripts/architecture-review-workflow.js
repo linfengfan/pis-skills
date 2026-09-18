@@ -2,9 +2,27 @@
  * 架构方案评审 Workflow
  * 对架构方案进行评审打分
  * 80分红线，低于80分打回重写
+ *
+ * 本文件自包含：Workflow 运行时在隔离环境执行脚本，不提供文件系统访问，
+ * 因此不能 import 外部模块。所有 prompt 与 schema 必须内联在本文件内。
  */
 
-import { DIMENSION_SCHEMA } from './shared/schemas.js'
+// ============================================================
+// 内联 Schema
+// ============================================================
+
+const DIMENSION_SCHEMA = {
+  type: 'object',
+  properties: {
+    dimension: { type: 'string' },
+    score: { type: 'number' },
+    maxScore: { type: 'number' },
+    findings: { type: 'array', items: { type: 'string' } },
+    issues: { type: 'array', items: { type: 'string' } },
+    recommendation: { type: 'string' },
+  },
+  required: ['dimension', 'score', 'maxScore'],
+}
 
 export const meta = {
   name: 'fe-architecture-review',

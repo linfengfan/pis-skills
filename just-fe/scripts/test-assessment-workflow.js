@@ -2,10 +2,116 @@
  * 测试评估 Workflow
  * 针对需求和代码变更进行完整度、可行性评估
  * 80分红线，低于80分打回架构和开发重新做
+ *
+ * 本文件自包含：Workflow 运行时在隔离环境执行脚本，不提供文件系统访问，
+ * 因此不能 import 外部模块。所有 prompt 与 schema 必须内联在本文件内。
  */
 
-import { TEST_ASSESSMENT_SYSTEM } from './shared/prompts.js'
-import { TEST_ASSESSMENT_SCHEMA } from './shared/schemas.js'
+// ============================================================
+// 内联 System Prompt
+// ============================================================
+
+const TEST_ASSESSMENT_SYSTEM = `你是测试评估专家。
+
+对需求和代码变更进行完整度、可行性评估。评估必须**可量化、有依据**，不能模糊判断。
+
+## 评估维度
+
+### 1. 需求覆盖（30分）
+验收标准逐条检查：
+- 每条验收标准是否有对应测试或验证方式
+- 正面路径是否覆盖
+- 负面路径（错误输入、异常情况）是否覆盖
+- 扣分原因必须具体指出是哪个验收标准未覆盖
+
+### 2. 边界与异常流（20分）
+检查以下场景是否有处理：
+- 空数据/空列表
+- 极值（超长文本、极大数字、大列表）
+- 网络错误（超时、无权限、服务端异常）
+- 并发与竞态（重复提交、请求取消）
+- 状态边界（分页边界、列表边界）
+
+### 3. 回归覆盖（20分）
+检查改动影响的功能：
+- 被修改文件的调用方是否需要回归测试
+- 公共组件改动影响范围
+- 接口变更影响范围
+- 给出必须人工验证的操作路径清单
+
+### 4. 异常处理（15分）
+- 错误是否被静默吞掉
+- 用户是否有可理解的错误反馈
+- 是否有兜底逻辑
+
+### 5. 代码质量（15分）
+- 测试用例本身是否可维护
+- 断言是否充分
+- 边界条件是否覆盖
+- 是否有必要的注释
+
+## 评分标准
+
+| 等级 | 分值 | 含义 |
+|------|------|------|
+| 优秀 | 90-100 | 完整覆盖，有亮点 |
+| 良好 | 80-89 | 满足要求 |
+| 及格 | 70-79 | 基本满足，有改进空间 |
+| **不及格** | **<80** | **必须打回** |
+
+## 输出格式
+- 评分必须有具体扣分原因
+- 每个维度给出发现与问题
+- 明确指出哪些需要人工验证`
+
+// ============================================================
+// 内联 Schema
+// ============================================================
+
+const DIMENSION_DETAIL = {
+  type: 'object',
+  properties: {
+    score: { type: 'number' },
+    maxScore: { type: 'number' },
+    covered: { type: 'array' },
+    missing: { type: 'array' },
+    issues: { type: 'array' },
+  },
+}
+
+const TEST_ASSESSMENT_SCHEMA = {
+  type: 'object',
+  properties: {
+    requirementCoverage: DIMENSION_DETAIL,
+    boundaryCoverage: DIMENSION_DETAIL,
+    regressionCoverage: {
+      type: 'object',
+      properties: {
+        score: { type: 'number' },
+        maxScore: { type: 'number' },
+        affectedFunctions: { type: 'array' },
+        manualVerification: { type: 'array' },
+        issues: { type: 'array' },
+      },
+    },
+    exceptionHandling: DIMENSION_DETAIL,
+    codeQuality: {
+      type: 'object',
+      properties: {
+        score: { type: 'number' },
+        maxScore: { type: 'number' },
+        strengths: { type: 'array' },
+        issues: { type: 'array' },
+      },
+    },
+    totalScore: { type: 'number' },
+    maxScore: { type: 'number' },
+    finalScore: { type: 'number' },
+    criticalGaps: { type: 'array' },
+    manualVerificationPoints: { type: 'array' },
+  },
+  required: ['totalScore', 'finalScore', 'requirementCoverage'],
+}
 
 export const meta = {
   name: 'fe-test-assessment',

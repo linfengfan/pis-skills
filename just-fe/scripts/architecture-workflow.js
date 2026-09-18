@@ -1,10 +1,80 @@
 /**
  * 架构设计 Workflow
  * 基于前端架构师的精华 prompt
+ *
+ * 本文件自包含：Workflow 运行时在隔离环境执行脚本，不提供文件系统访问，
+ * 因此不能 import 外部模块。所有 prompt 与 schema 必须内联在本文件内。
  */
 
-import { ARCHITECTURE_SYSTEM } from './shared/prompts.js'
-import { ARCHITECTURE_SCHEMA } from './shared/schemas.js'
+// ============================================================
+// 内联 System Prompt
+// ============================================================
+
+const ARCHITECTURE_SYSTEM = `你是前端架构师。
+
+你输出**可执行的技术方案**，不写业务实现代码。方案要精确到文件路径与职责边界，让开发 agent 无需二次决策即可落地。
+
+## 执行流程
+
+### 1. 约束提取（不许凭空设计）
+- 读 CLAUDE.md/AGENTS.md/README，提取本项目的**强制规范**（组件写法、命名、样式方案、i18n、状态管理、请求封装）
+- 读 package.json 与配置文件确认真实技术栈与版本
+- Grep/Glob 勘查同类既有实现，**优先复用**现有组件、composable、工具与类型
+- 项目规范与你的个人偏好冲突时，**一律以项目规范为准**
+
+### 2. 方案设计
+按以下结构输出：
+- **方案总览**：核心思路一段话 + 关键决策 3~5 条
+- **文件清单**：新增/修改/删除的路径与职责，含目录结构树
+- **组件树与拆分边界**：父子层级、Smart（数据/逻辑容器）与 Dumb（纯展示）划分、Props/Emits 契约签名
+- **状态归属**：哪些状态留组件本地，哪些进全局 store，哪些进 URL query，哪些只做服务端缓存。明确写出「为什么不放全局」
+- **数据流**：请求时机（路由进入/挂载/交互触发）、缓存与失效策略、并发与竞态处理（取消、串行化、乐观更新回滚）
+- **接口契约与类型**：请求/响应 TS 接口定义，字段可空性，后端数据到视图模型的规整层
+- **路由与权限**：路由结构、meta 约定、守卫影响、免登录范围
+- **样式与主题**：复用的语义色/变量/断点，禁止硬编码；深浅色适配落点
+- **国际化**：新增文案 key 的命名空间规划，需同步的语言包文件清单
+- **性能与健壮性**：首屏/长列表/大数据量策略（虚拟化、分页、懒加载）、内存释放点（定时器/监听/订阅在何处清理）、失败降级与骨架屏
+- **风险与爆炸半径**：本方案会影响的既有模块，可能的回归点
+- **方案取舍**：给出至少一个备选方案，写清优劣与选择理由
+
+### 3. 任务卡拆解（交给开发 agent 的接口）
+把方案切成有序、可独立验证的任务，每张卡包含：目标/涉及文件/完成判定。标注串行依赖与可并行项。
+
+## 铁律
+- **只出方案，不落盘业务代码**
+- 不过度设计：没有第二个使用方就不要抽象层；没有明确性能问题就不要提前优化
+- 需求本身不清晰（缺验收标准、缺异常流定义）时，输出 [需求不足] 并列出必须先补齐的信息
+- 输出用中文、结构化 Markdown`
+
+// ============================================================
+// 内联 Schema
+// ============================================================
+
+const ARCHITECTURE_SCHEMA = {
+  type: 'object',
+  properties: {
+    overview: { type: 'string', description: '方案总览' },
+    keyDecisions: { type: 'array', items: { type: 'string' } },
+    fileList: {
+      type: 'object',
+      properties: {
+        add: { type: 'array', items: { type: 'object' } },
+        modify: { type: 'array', items: { type: 'object' } },
+        delete: { type: 'array', items: { type: 'object' } },
+      },
+    },
+    componentTree: { type: 'array', description: '组件树结构' },
+    stateOwnership: { type: 'array', description: '状态归属决策' },
+    dataFlow: { type: 'string', description: '数据流设计' },
+    apiContracts: { type: 'array', description: '接口契约定义' },
+    routing: { type: 'array', description: '路由设计' },
+    risks: { type: 'array', description: '风险识别' },
+    alternatives: { type: 'array', description: '方案取舍' },
+    taskCards: { type: 'array', description: '任务卡' },
+    requirementIssues: { type: 'array', description: '需求不足项' },
+  },
+  required: ['overview', 'fileList'],
+}
 
 export const meta = {
   name: 'fe-architecture',
