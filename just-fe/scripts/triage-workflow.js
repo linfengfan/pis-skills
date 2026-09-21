@@ -172,7 +172,7 @@ const report = `# 需求梳理报告
 | 字段 | 值 |
 |------|-----|
 | 需求 | ${context.requirement} |
-| 梳理时间 | ${new Date().toISOString()} |
+| 梳理时间 | ${context.timestamp || '（由编排方落盘时填写）'} |
 | 状态 | ${analysisResult.blockReason ? '🚫 需阻断' : '✅ 可推进'} |
 
 ${analysisResult.blockReason ? `

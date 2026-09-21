@@ -410,7 +410,7 @@ const report = `# 测试评估报告
 |------|-----|
 | 需求 | ${context.requirement || '⚠️ 未提供，由评估员从 diff 推断'} |
 | 评估轮次 | 第${round}轮 |
-| 评估时间 | ${new Date().toISOString()} |
+| 评估时间 | ${context.timestamp || '（由编排方落盘时填写）'} |
 | 验证手段 | ${e2e.framework || 'none'} |
 | **总分** | **${finalScore}/100** |
 | **结论** | **${passed ? '✅ 通过' : '❌ 打回'}** |

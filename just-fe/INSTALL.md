@@ -109,6 +109,7 @@ cp "$SRC"/scripts/*-workflow.js "$CFG/workflows/"
 ```bash
 find "$CFG/workflows" -maxdepth 1 -name '*.js' -exec grep -ls "name: '\($FE_NAMES\)'" {} \; 2>/dev/null | wc -l   # 应为 7
 find "$CFG/workflows" -maxdepth 1 -name '*-workflow.js' -exec grep -l '^import' {} \; 2>/dev/null                # 应无输出
+find "$CFG/workflows" -maxdepth 1 -name '*-workflow.js' -exec grep -ln 'new Date\|Date\.now\|Math\.random' {} \; 2>/dev/null   # 应无输出（有则是旧脚本，会在拼报告时崩）
 for f in "$SRC"/scripts/*-workflow.js; do
   node --check <(printf 'async function __w(){\n'; sed 's/^export const meta = {/const meta = {/' "$f"; printf '}\n') && echo "syntax OK $(basename "$f")"
 done
@@ -218,6 +219,12 @@ fi
 
   ```bash
   node -e 'const fs=require("fs"),g=f=>fs.readFileSync(f,"utf8").match(/const FRONTEND_DEV_SYSTEM = `([\s\S]*?)`\n/)[1];console.log(g("scripts/ui-implementation-workflow.js")===g("scripts/api-integration-workflow.js")?"IDENTICAL":"DIFF")'
+  ```
+
+- **禁止 `Date` / `Math.random`**：运行时为了可 resume 强制确定性，脚本里任何 `new Date()` / `Date.now()` / `Math.random()` 都会让整段运行失败——而且是在所有 agent 跑完、拼报告时才炸，结果全丢。时间戳一律从 `args.timestamp` 读，由编排方传入。自查：
+
+  ```bash
+  rg -n "new Date|Date\.now|Math\.random" scripts/*.js   # 应无输出
   ```
 
 - **脚本里的角色名不是 Skill**：「资深前端开发工程师」「前端架构师」「代码评审终审官」「E2E 验证执行者」都只是内联 prompt 的称呼，`Skill(前端开发工程师)` 会得到 `Unknown skill`。

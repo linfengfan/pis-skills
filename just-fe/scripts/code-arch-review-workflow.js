@@ -413,7 +413,7 @@ const report = `# 代码架构Review报告
 | 评审需求 | ${context.requirement || '⚠️ 未提供，由评审员从 diff 推断'} |
 | 评审轮次 | 第${context.round || 1}轮 |
 | 变更范围 | ${changeScope} |
-| 评审时间 | ${new Date().toISOString()} |
+| 评审时间 | ${context.timestamp || '（由编排方落盘时填写）'} |
 | **总分** | **${finalScore}/100** |
 | **结论** | **${verdictLabels[verdict]}** |
 | 判定依据 | ${verdictReason} |

@@ -212,7 +212,7 @@ const report = `# 页面UI开发报告
 |------|-----|
 | 需求 | ${context.requirement} |
 | 设计稿 | ${hasFigma ? context.figmaUrl : `无（用户确认：${noDesignReason}）`} |
-| 开发时间 | ${new Date().toISOString()} |
+| 开发时间 | ${context.timestamp || '（由编排方落盘时填写）'} |
 | 质量评估 | ${dev.quality || 'medium'} |
 
 ${dev.blockReason ? `

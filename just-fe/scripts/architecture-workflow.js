@@ -160,7 +160,7 @@ const report = `# 架构设计方案
 | 字段 | 值 |
 |------|-----|
 | 需求 | ${context.requirement} |
-| 设计时间 | ${new Date().toISOString()} |
+| 设计时间 | ${context.timestamp || '（由编排方落盘时填写）'} |
 | 状态 | ${designResult.requirementIssues?.length > 0 ? '⚠️ 需求不足' : '✅ 可推进'} |
 
 ${designResult.requirementIssues?.length > 0 ? `

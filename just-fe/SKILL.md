@@ -116,7 +116,9 @@ description: 当用户要开发前端功能、做前端需求分析或方案评�
 ```
 
 - `args` 必须是**对象**，不要 `JSON.stringify` 成字符串
+- **每次调用都带 `timestamp`**（先用 Bash 跑 `date -u +%FT%TZ` 取值，放进 `args`）。Workflow 脚本里禁止 `Date` / `Math.random`（运行时为了可 resume 强制确定性，调用即整段失败），所以报告里的时间只能由你传进去；不传则报告时间字段留占位文字
 - 按 `name` 报 not found 但 `~/.claude/workflows/` 里确实有脚本 → 改用 `scriptPath` 指向该文件；若脚本随后返回 `invalid_args`，是运行时已知 bug（`scriptPath` 方式丢 `args`），停下告知用户升级 Claude Code 或改走模式 A
+- **Workflow 在后台异步运行**：工具立刻返回 `status: 'async_launched'` 和 `taskId`，结果在跑完后自动回到会话。此时你该做的是**等**——不要空参调 `TaskOutput`（会报 `Task ID is required`），也不要反复轮询（每次轮询都占主上下文）。确需看进度：`TaskOutput` 带上返回的 `taskId`，或让用户打开 `/workflows` 看
 
 模式 A，`Agent` 工具的必填参数是 `description`、`prompt`、`subagent_type`，**没有** `label` / `schema` / `phase`——那三个是 Workflow 脚本内 `agent()` 的选项，照搬过来就是 `Invalid tool parameters`。对应关系：
 
@@ -138,13 +140,15 @@ description: 当用户要开发前端功能、做前端需求分析或方案评�
 | `Invalid tool parameters` | **参数名或类型错**，不是工具不可用 | 重新读该工具的参数描述，按上面的形态改一次再调。仍报错 → 把工具名、你传的参数、错误原文一起停下告诉用户 |
 | `Unknown workflow` / not found | 模式 B 没装或按 `name` 解析失败 | 试 `scriptPath`；再不行按模式 A 走 |
 | `Unknown skill` | 调了不存在的 Skill | 见上一节，改用 Workflow 或 `Agent` |
+| `Task ID is required` | 空参调了 `TaskOutput` | 用 Workflow 返回的 `taskId`，或干脆等完成通知 |
+| `Date.now() / new Date() are unavailable in workflow scripts` | 脚本里用了 `Date`（当前版本已移除；出现说明装的是旧脚本） | 按 INSTALL.md Step 4 升级脚本；这一轮的评审结果已丢，需重跑该阶段 |
 | 子 agent 返回空 / 被截断 | 运行时错误 | 原样重试一次；仍失败停下报告 |
 
 **禁止的降级**：两种工具都调不通时，不要「改用直接执行模式，自己在主上下文里完成分析」。那会把阶段产物和中间过程全灌进主上下文，③⑥⑦ 的评审也失去独立性。正确动作是停下来，把报错原文交给用户，让用户决定修环境还是换模式。
 
 ## 阶段编排表（入参必须带齐）
 
-**没有总编排脚本。** 每次调用前从磁盘读上游产物作为入参；**不要空参调用**——脚本对空参只会返回 `status='invalid_args'`（或从 diff 推断并降低置信度），不会替你去读文件。
+**没有总编排脚本。** 每次调用前从磁盘读上游产物作为入参；**不要空参调用**——脚本对空参只会返回 `status='invalid_args'`（或从 diff 推断并降低置信度），不会替你去读文件。下表之外，**所有阶段都接受 `timestamp`**（ISO 字符串），每次调用都带上。
 
 | 阶段 | Workflow 名称 | 必带入参（来源） | 可选入参 | 返回值判读 |
 |------|---------------|----------------|----------|-----------|
@@ -166,7 +170,8 @@ description: 当用户要开发前端功能、做前端需求分析或方案评�
     "changeScope": "git diff main...HEAD",
     "projectContext": "<.claude/fe-profile.md 全文>",
     "requirementFiles": ["src/views/Detail.vue", "src/api/favorite.ts"],
-    "round": 1
+    "round": 1,
+    "timestamp": "2026-09-21T12:00:00Z"
   }
 }
 ```
@@ -248,6 +253,7 @@ description: 当用户要开发前端功能、做前端需求分析或方案评�
 | 「直接 `/fe-code-arch-review` 跑一下」 | 空参会失败或降置信度。从磁盘读 requirement / changeScope / round 再调 |
 | 「`Agent` 工具报 `Invalid tool parameters`，Workflow 也不行，我自己在主上下文里做吧」 | 参数错 ≠ 工具不可用。按「工具怎么调」改参数重试一次；仍失败就停下把报错交给用户。禁止退化成主上下文直接干 |
 | 「把 `label` / `schema` 传给 `Agent` 工具」 | 那是脚本内 `agent()` 的选项。`Agent` 工具只认 `description` / `prompt` / `subagent_type`，schema 要写进 prompt |
+| 「Workflow 启动了，我调 `TaskOutput` 看看跑到哪了」 | 后台跑完会自动回来。空参 `TaskOutput` 报错，反复轮询浪费上下文。等 |
 | 「顺手把这个文件格式化一下」 | 越界改动。开发 agent 只改需求涉及文件，Review 会把它记成问题 |
 | 「测试评估看代码就能打分」 | 先跑 E2E/回归取证。没有工具证据的验收标准只能算 unverified |
 | 「汇报时说『当前在 UI 开发阶段』」 | 先读 MEMORY.md 的 `current_stage`，不凭记忆 |

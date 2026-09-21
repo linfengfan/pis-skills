@@ -315,7 +315,7 @@ const report = `# 接口联调总结
 | 字段 | 值 |
 |------|-----|
 | 需求 | ${context.requirement} |
-| 联调时间 | ${new Date().toISOString()} |
+| 联调时间 | ${context.timestamp || '（由编排方落盘时填写）'} |
 | 联调状态 | ${integrationResult.integrationStatus} |
 
 ## 接口清单

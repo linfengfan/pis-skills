@@ -312,7 +312,7 @@ const report = `# 架构方案评审报告
 |------|-----|
 | 评审对象 | ${context.architectureName || '架构方案'} |
 | 评审轮次 | 第${context.round || 1}轮 |
-| 评审时间 | ${new Date().toISOString()} |
+| 评审时间 | ${context.timestamp || '（由编排方落盘时填写）'} |
 | **总分** | **${finalScore}/100** |
 
 ## 分项评分
