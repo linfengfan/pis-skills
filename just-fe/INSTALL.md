@@ -221,4 +221,5 @@ fi
   ```
 
 - **脚本里的角色名不是 Skill**：「资深前端开发工程师」「前端架构师」「代码评审终审官」「E2E 验证执行者」都只是内联 prompt 的称呼，`Skill(前端开发工程师)` 会得到 `Unknown skill`。
-- **`args` 可能是 `undefined`**：用户不带参数调用 `/fe-*` 时如此。每个脚本开头都有归一化，新增脚本要保留这段。
+- **`args` 可能是 `undefined`，也可能是 JSON 字符串**：前者是用户不带参数调用 `/fe-*`；后者是运行时已知 bug（anthropics/claude-code #67627）。每个脚本开头都有归一化（`undefined` → `{}`，JSON 字符串 → `JSON.parse`，纯文字 → `requirement`），新增脚本要保留这段。
+- **按 `name` 可能解析不到 `~/.claude/workflows/` 里的脚本**（#63876）：SKILL.md 已写了 `scriptPath` 退路；安装后若 `/fe-*` 补全正常但 `Workflow` 工具按 name 报 not found，属于这个 bug，不是安装问题。

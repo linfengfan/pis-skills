@@ -100,10 +100,47 @@ description: 当用户要开发前端功能、做前端需求分析或方案评�
 
 | 模式 | 判定 | 每个阶段怎么跑 |
 |------|------|--------------|
-| **B/C · Workflow 可用** | 输入 `/` 能补全出 `fe-triage` 等 7 个命令，或 Workflow 工具调用 `fe-triage` 不报 `Unknown workflow` | 用 Workflow 工具调用下表的 `fe-*` 名称，**带齐入参** |
-| **A · 只装了 Skill** | 上述命令不存在 | 读 `scripts/<阶段>-workflow.js`，把其中的 system prompt 常量（如 `FRONTEND_DEV_SYSTEM`）连同「主流程」里拼装的入参，交给一个子 agent（Task/Agent 工具）执行；脚本里的 JS 汇总逻辑（加权、判定、报告拼装）由你手工完成。打分类阶段（③⑥⑦）的多维度要**同一批并行**派出多个子 agent，每个只负责一个维度 |
+| **B/C · Workflow 可用** | 输入 `/` 能补全出 `fe-triage` 等 7 个命令，或 `Workflow` 工具按 `name` 调用 `fe-triage` 不报 not found | 用 `Workflow` 工具调用下表的 `fe-*` 名称，**带齐入参** |
+| **A · 只装了 Skill** | 上述命令不存在 | 读 `scripts/<阶段>-workflow.js`，把其中的 system prompt 常量（如 `FRONTEND_DEV_SYSTEM`）连同「主流程」里拼装的入参，交给一个子 agent（`Agent` 工具）执行；脚本里的 JS 汇总逻辑（加权、判定、报告拼装）由你手工完成。打分类阶段（③⑥⑦）的多维度要**同一批并行**派出多个子 agent，每个只负责一个维度 |
 
 两种模式下产物路径、闸门、评分铁律完全一致。模式 A 下 `parallel()` 的隔离性靠你手工保证：不要把一个维度的结论喂给另一个维度的评审员。
+
+### 工具怎么调（参数名以工具自己的 schema 为准）
+
+**调用任何工具之前先看它的参数描述**，下面是两种模式各自的正确形态，以及最常见的参数错误。
+
+模式 B/C，`Workflow` 工具的参数是 `name` + `args`（另有 `script` / `scriptPath` / `resumeFromRunId`，三选一提供 `name` / `script` / `scriptPath`）：
+
+```json
+{ "name": "fe-triage", "args": { "requirement": "<需求原文>", "projectContext": "<fe-profile 全文>" } }
+```
+
+- `args` 必须是**对象**，不要 `JSON.stringify` 成字符串
+- 按 `name` 报 not found 但 `~/.claude/workflows/` 里确实有脚本 → 改用 `scriptPath` 指向该文件；若脚本随后返回 `invalid_args`，是运行时已知 bug（`scriptPath` 方式丢 `args`），停下告知用户升级 Claude Code 或改走模式 A
+
+模式 A，`Agent` 工具的必填参数是 `description`、`prompt`、`subagent_type`，**没有** `label` / `schema` / `phase`——那三个是 Workflow 脚本内 `agent()` 的选项，照搬过来就是 `Invalid tool parameters`。对应关系：
+
+| 脚本里 `agent(prompt, opts)` | `Agent` 工具参数 |
+|-----|-----|
+| `opts.label` | `description`（3～5 个词，如 `triage requirement`） |
+| `prompt` | `prompt`（把脚本里拼好的完整 prompt 原文放进去） |
+| `opts.schema` | 追加到 `prompt` 末尾：「回复末尾输出一个 ```json 代码块，严格符合以下 JSON Schema：`<schema 原文>`」；返回后你自己解析这个代码块 |
+| — | `subagent_type`：填当前环境工具描述里列出的通用类型（Claude Code 是 `general-purpose`），不要凭记忆编 |
+
+```json
+{ "description": "triage requirement", "subagent_type": "general-purpose", "prompt": "<REQUIREMENT_ANALYSIS_SYSTEM 原文>\n\n---\n\n## 待分析需求\n<需求原文>\n\n回复末尾输出一个 ```json 代码块，严格符合以下 JSON Schema：<REQUIREMENT_SCHEMA 原文>" }
+```
+
+### 工具报错怎么处理
+
+| 报错 | 含义 | 处理 |
+|------|------|------|
+| `Invalid tool parameters` | **参数名或类型错**，不是工具不可用 | 重新读该工具的参数描述，按上面的形态改一次再调。仍报错 → 把工具名、你传的参数、错误原文一起停下告诉用户 |
+| `Unknown workflow` / not found | 模式 B 没装或按 `name` 解析失败 | 试 `scriptPath`；再不行按模式 A 走 |
+| `Unknown skill` | 调了不存在的 Skill | 见上一节，改用 Workflow 或 `Agent` |
+| 子 agent 返回空 / 被截断 | 运行时错误 | 原样重试一次；仍失败停下报告 |
+
+**禁止的降级**：两种工具都调不通时，不要「改用直接执行模式，自己在主上下文里完成分析」。那会把阶段产物和中间过程全灌进主上下文，③⑥⑦ 的评审也失去独立性。正确动作是停下来，把报错原文交给用户，让用户决定修环境还是换模式。
 
 ## 阶段编排表（入参必须带齐）
 
@@ -119,18 +156,22 @@ description: 当用户要开发前端功能、做前端需求分析或方案评�
 | ⑥代码Review | `fe-code-arch-review` | `requirement`、`changeScope`（如 `git diff main...HEAD`）、`round` | `projectContext`、`requirementFiles`（②文件清单 + ④⑤ `completedFiles`，用于判越界改动） | `passed===false` 带 `criticalIssues`+`minorIssues` 回④⑤，`round+1`，最多 2 轮 |
 | ⑦测试评估 | `fe-test-assessment` | `requirement`、`acceptanceCriteria`（① 的验收标准）、`changeScope`、`round` | `projectContext`（含 e2e/test 门禁命令）、`e2eCommand`、`devServerCommand`、`baseUrl`、`skipE2E` | `passed===false` 回②④⑤，`round+1`，最多 2 轮；`e2eVeto===true` 时先修失败项 |
 
-单阶段调用形态：
+单阶段调用形态（`Workflow` 工具，`args` 是对象）：
 
-```javascript
-const result = await workflow('fe-code-arch-review', {
-  requirement: '<triage 报告「一句话目标」+ 验收标准>',
-  changeScope: 'git diff main...HEAD',
-  projectContext: '<.claude/fe-profile.md 全文>',
-  requirementFiles: ['src/views/Detail.vue', 'src/api/favorite.ts'],
-  round: 1,
-})
-// result.passed / result.finalScore / result.criticalIssues / result.report
+```json
+{
+  "name": "fe-code-arch-review",
+  "args": {
+    "requirement": "<triage 报告「一句话目标」+ 验收标准>",
+    "changeScope": "git diff main...HEAD",
+    "projectContext": "<.claude/fe-profile.md 全文>",
+    "requirementFiles": ["src/views/Detail.vue", "src/api/favorite.ts"],
+    "round": 1
+  }
+}
 ```
+
+返回值里读 `passed` / `finalScore` / `criticalIssues` / `report`。
 
 ### 完整流程的编排步骤
 
@@ -205,6 +246,8 @@ const result = await workflow('fe-code-arch-review', {
 | 「用户说开始评审了，我先把 UI 阶段收个尾」 | 用户点名了阶段。先改 MEMORY `current_stage`，再问 ④⑤ 算完成还是跳过 |
 | 「没设计稿就按现有风格来吧」 | 这是用户的决定。先问，拿到链接或明确的「无设计稿」原话再进 ④ |
 | 「直接 `/fe-code-arch-review` 跑一下」 | 空参会失败或降置信度。从磁盘读 requirement / changeScope / round 再调 |
+| 「`Agent` 工具报 `Invalid tool parameters`，Workflow 也不行，我自己在主上下文里做吧」 | 参数错 ≠ 工具不可用。按「工具怎么调」改参数重试一次；仍失败就停下把报错交给用户。禁止退化成主上下文直接干 |
+| 「把 `label` / `schema` 传给 `Agent` 工具」 | 那是脚本内 `agent()` 的选项。`Agent` 工具只认 `description` / `prompt` / `subagent_type`，schema 要写进 prompt |
 | 「顺手把这个文件格式化一下」 | 越界改动。开发 agent 只改需求涉及文件，Review 会把它记成问题 |
 | 「测试评估看代码就能打分」 | 先跑 E2E/回归取证。没有工具证据的验收标准只能算 unverified |
 | 「汇报时说『当前在 UI 开发阶段』」 | 先读 MEMORY.md 的 `current_stage`，不凭记忆 |

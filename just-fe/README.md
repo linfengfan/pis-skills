@@ -182,6 +182,7 @@
 | 担心 AI 顺手格式化全局代码 | 开发 agent 被要求只改需求涉及的文件，收工前用 `git diff --stat` 自查回退无关改动；⑥ 再复核一次，越界改动会被记问题 | 看 ⑥ 报告的「越界改动」条目 |
 | 报错 `Unknown skill: 前端开发工程师` | 旧版本问题。脚本里的角色名被当成了外部 Skill | 更新到当前版本 |
 | 报错 `undefined is not an object (evaluating 'context.requirement')` | 旧版本问题。不带参数调 workflow 导致 | 更新到当前版本；单跑命令时把需求说清楚 |
+| 它说「Agent 工具 `Invalid tool parameters`」然后自己在对话里开始做分析 | 旧版本问题。子 agent 参数名传错被误判成工具不可用 | 更新到当前版本；新版会改参数重试，仍失败会停下把报错给你看，而不是自己上 |
 
 ---
 

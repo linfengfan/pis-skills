@@ -94,10 +94,14 @@ export const meta = {
 
 phase('约束提取')
 // 用户直接输入 /fe-architecture 不带参数时 args 为 undefined，也可能只是一段文字；
-// 先归一化再取字段，否则脚本会在这里以 TypeError 直接失败。
-const context = typeof args === 'string'
-  ? { requirement: args }
-  : (args && typeof args === 'object' && !Array.isArray(args)) ? args : {}
+// 运行时还有个已知 bug：args 有时以 JSON 字符串而非对象传入。先归一化再取字段，否则脚本会在这里以 TypeError 直接失败。
+const parsedArgs = (() => {
+  if (typeof args !== 'string') return args
+  const s = args.trim()
+  if (s.startsWith('{')) { try { return JSON.parse(s) } catch (e) { /* 不是 JSON，按纯文字处理 */ } }
+  return { requirement: s }
+})()
+const context = (parsedArgs && typeof parsedArgs === 'object' && !Array.isArray(parsedArgs)) ? parsedArgs : {}
 
 if (!context.requirement) {
   log('🚫 未收到 requirement 入参，无法设计方案')

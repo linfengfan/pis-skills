@@ -206,10 +206,14 @@ const REVIEW_DIMENSIONS = {
 
 phase('方案分析')
 // 用户直接输入 /fe-architecture-review 不带参数时 args 为 undefined，也可能直接把方案全文当字符串传进来；
-// 先归一化再取字段，否则脚本会在这里以 TypeError 直接失败。
-const context = typeof args === 'string'
-  ? { architecture: args }
-  : (args && typeof args === 'object' && !Array.isArray(args)) ? args : {}
+// 运行时还有个已知 bug：args 有时以 JSON 字符串而非对象传入。先归一化再取字段，否则脚本会在这里以 TypeError 直接失败。
+const parsedArgs = (() => {
+  if (typeof args !== 'string') return args
+  const s = args.trim()
+  if (s.startsWith('{')) { try { return JSON.parse(s) } catch (e) { /* 不是 JSON，按方案全文处理 */ } }
+  return { architecture: s }
+})()
+const context = (parsedArgs && typeof parsedArgs === 'object' && !Array.isArray(parsedArgs)) ? parsedArgs : {}
 
 const architecture = context.architecture || context.requirement || ''
 if (!architecture.trim()) {

@@ -204,10 +204,14 @@ export const meta = {
 
 phase('E2E 执行')
 // 用户直接输入 /fe-test-assessment 不带参数时 args 为 undefined，也可能只是一段文字；
-// 先归一化再取字段，否则脚本会在这里以 TypeError 直接失败。
-const context = typeof args === 'string'
-  ? { requirement: args }
-  : (args && typeof args === 'object' && !Array.isArray(args)) ? args : {}
+// 运行时还有个已知 bug：args 有时以 JSON 字符串而非对象传入。先归一化再取字段，否则脚本会在这里以 TypeError 直接失败。
+const parsedArgs = (() => {
+  if (typeof args !== 'string') return args
+  const s = args.trim()
+  if (s.startsWith('{')) { try { return JSON.parse(s) } catch (e) { /* 不是 JSON，按纯文字处理 */ } }
+  return { requirement: s }
+})()
+const context = (parsedArgs && typeof parsedArgs === 'object' && !Array.isArray(parsedArgs)) ? parsedArgs : {}
 
 const requirement = context.requirement
   || '（调用方未提供需求描述。请从 git diff、commit message 以及 fe-reports/ 下最近的 triage/architecture 报告推断本次改动意图，并在报告中注明置信度降低）'
