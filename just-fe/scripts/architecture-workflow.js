@@ -1,6 +1,8 @@
 /**
  * 架构设计 Workflow
- * 基于前端架构师的精华 prompt
+ *
+ * 「前端架构师」只是下方内联 prompt 里的角色名，不是外部 Skill/Agent，
+ * 不要用 Skill(前端架构师) 之类的方式去调用它。
  *
  * 本文件自包含：Workflow 运行时在隔离环境执行脚本，不提供文件系统访问，
  * 因此不能 import 外部模块。所有 prompt 与 schema 必须内联在本文件内。
@@ -91,14 +93,26 @@ export const meta = {
 // ============================================================
 
 phase('约束提取')
-const context = args
+// 用户直接输入 /fe-architecture 不带参数时 args 为 undefined，也可能只是一段文字；
+// 先归一化再取字段，否则脚本会在这里以 TypeError 直接失败。
+const context = typeof args === 'string'
+  ? { requirement: args }
+  : (args && typeof args === 'object' && !Array.isArray(args)) ? args : {}
+
+if (!context.requirement) {
+  log('🚫 未收到 requirement 入参，无法设计方案')
+  return {
+    design: {},
+    report: '# 架构设计方案\n\n🚫 调用 fe-architecture 时未传入 requirement，未执行任何设计。请由编排方读取 triage 产物后重新调用。',
+    status: 'invalid_args',
+    missing: ['requirement'],
+    nextStep: 'resolve_block',
+    message: '缺少 requirement 入参：请传入需求描述（建议同时传 requirementAnalysis 与 projectContext）后重新调用',
+  }
+}
+
 log(`📋 需求: ${context.requirement}`)
-
-// 读取项目规范
 log('📖 读取项目规范...')
-
-// 阶段1: 约束提取
-phase('约束提取')
 log('🔍 执行约束提取...')
 
 // 阶段2: 方案设计
@@ -120,11 +134,11 @@ ${context.projectContext || '请基于通用前端最佳实践设计'}
 
 请按结构化格式输出架构设计方案。`
 
-const designResult = await agent(designPrompt, {
+const designResult = (await agent(designPrompt, {
   label: 'architecture-design',
   phase: '方案设计',
   schema: ARCHITECTURE_SCHEMA,
-})
+})) || { requirementIssues: ['架构 agent 未返回结构化结果'] }
 
 // 检查需求是否充足
 if (designResult.requirementIssues && designResult.requirementIssues.length > 0) {
@@ -227,5 +241,5 @@ return {
   nextStep: designResult.requirementIssues?.length > 0 ? 'clarify_requirements' : 'architecture_review',
   message: designResult.requirementIssues?.length > 0
     ? `需求存在不足项，需补齐后再评审`
-    : '架构设计完成，可以进入方案评审阶段',
+    : '架构设计完成，请与用户确认后再进入方案评审阶段',
 }

@@ -205,11 +205,35 @@ const REVIEW_DIMENSIONS = {
 // ============================================================
 
 phase('方案分析')
-const context = args
+// 用户直接输入 /fe-architecture-review 不带参数时 args 为 undefined，也可能直接把方案全文当字符串传进来；
+// 先归一化再取字段，否则脚本会在这里以 TypeError 直接失败。
+const context = typeof args === 'string'
+  ? { architecture: args }
+  : (args && typeof args === 'object' && !Array.isArray(args)) ? args : {}
+
+const architecture = context.architecture || context.requirement || ''
+if (!architecture.trim()) {
+  log('🚫 未收到 architecture 入参，没有可评审的方案')
+  return {
+    dimensionResults: [],
+    totalScore: 0,
+    maxTotalScore: 0,
+    finalScore: 0,
+    passed: false,
+    conclusion: '未评审',
+    issues: [],
+    report: '# 架构方案评审报告\n\n🚫 调用 fe-architecture-review 时未传入 architecture（方案全文），未执行评审。请由编排方读取 architecture-{日期}.md 全文后重新调用。',
+    status: 'invalid_args',
+    missing: ['architecture'],
+    round: context.round || 1,
+    nextAction: 'resolve_block',
+    message: '缺少 architecture 入参：请把 architecture-{日期}.md 全文作为 architecture 传入（建议同时传 profile 与 round）后重新调用',
+  }
+}
+
 log(`📋 评审对象: ${context.architectureName || '架构方案'}`)
 log(`📄 方案路径: ${context.architecturePath || '内联提供'}`)
 
-const architecture = context.architecture || context.requirement || '无'
 const profile = context.profile || '无项目画像'
 
 log('📖 开始分析方案文档...')
@@ -254,7 +278,7 @@ for (const result of dimensionResults) {
       percentage: result.maxScore ? Math.round((result.score / result.maxScore) * 100) : 0,
       issues: result.issues || [],
     })
-    log(`📊 ${result.dimension}: ${result.score}/${result.maxScore} (${Math.round((result.score / result.maxScore) * 100)}%)`)
+    log(`📊 ${result.dimension}: ${result.score}/${result.maxScore} (${result.maxScore ? Math.round((result.score / result.maxScore) * 100) : 0}%)`)
   }
 }
 
@@ -338,5 +362,9 @@ return {
   issues: allIssues,
   report,
   round: context.round || 1,
+  maxRounds: 3,
   nextAction: passed ? 'proceed_to_implementation' : 'revision_required',
+  message: passed
+    ? `方案评审通过（${finalScore}分），请与用户确认后再进入 UI 开发阶段`
+    : `方案评审未通过（${finalScore}分 < 80分），需带 issues 打回架构阶段重写`,
 }

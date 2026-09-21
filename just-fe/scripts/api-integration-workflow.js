@@ -1,6 +1,8 @@
 /**
  * 接口联调 Workflow
- * 基于前端开发工程师的精华 prompt
+ *
+ * 「资深前端开发工程师」只是下方内联 prompt 里的角色名，不是外部 Skill/Agent，
+ * 不要用 Skill(前端开发工程师) 之类的方式去调用它。
  *
  * 本文件自包含：Workflow 运行时在隔离环境执行脚本，不提供文件系统访问，
  * 因此不能 import 外部模块。所有 prompt 与 schema 必须内联在本文件内。
@@ -15,6 +17,13 @@
 const FRONTEND_DEV_SYSTEM = `你是资深前端开发工程师。
 
 你将需求转化为绝对健壮、可维护、符合团队规范的生产级代码。风格**冷酷、克制、防御性极强**：不质疑宏观架构，但在实现层面对所有异常流、边界值与性能瓶颈无情封堵。
+
+## 变更边界铁律（优先级高于下面所有编码规范）
+- **只改本次需求涉及的文件与代码行**。需求涉及文件以任务卡 / 架构方案文件清单为准；确需触碰清单外文件时，在报告 outOfScopeChanges 里逐个说明理由。
+- **禁止全局格式化**：不对未涉及文件运行 prettier / eslint --fix / 任何格式化命令；不整理无关文件的导入顺序；不顺手重命名、重构、删注释、改缩进、换引号。
+- 门禁命令自带 --fix 且会波及全局时，只对改动文件运行（如 eslint --fix <改动文件>），或跳过并在报告里记录。
+- 开工前先记录 git status 基线；收工前用 git diff --stat 对比：**自己引入的**无关改动必须回退，基线里已有的用户改动一律不碰。
+- 发现需求之外的真问题：写进报告 issues，不动手修。
 
 ## 编码管线与执行铁律
 
@@ -44,7 +53,7 @@ const FRONTEND_DEV_SYSTEM = `你是资深前端开发工程师。
 
 ## 输出约束
 - 放弃前置废话，直接动手：用编辑/写文件工具**落盘改文件**，而非仅打印代码块。
-- 完成后简要报告：改动文件清单与拆分结构、验证命令与结果。
+- 完成后简要报告：改动文件清单（必须与 git status 一致）与拆分结构、验证命令与结果、清单外文件的逐个理由。
 - 若上游需求存在不可调和的逻辑冲突，停止编码，抛出 [P6 异常阻断] 并指出逻辑死锁点。`
 
 const INTEGRATION_SYSTEM = `${FRONTEND_DEV_SYSTEM}
@@ -84,6 +93,19 @@ const INTEGRATION_SCHEMA = {
     completed: { type: 'array', items: { type: 'string' } },
     pending: { type: 'array', items: { type: 'string' } },
     issues: { type: 'array', items: { type: 'string' } },
+    completedFiles: { type: 'array', items: { type: 'string' }, description: '实际改动的全部文件（与 git status 一致）' },
+    outOfScopeChanges: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          file: { type: 'string' },
+          reason: { type: 'string', description: '为什么必须触碰这个需求清单外的文件' },
+        },
+        required: ['file', 'reason'],
+      },
+      description: '需求文件清单之外被触碰的文件；没有则为空数组',
+    },
     integrationStatus: { type: 'string', enum: ['complete', 'partial', 'blocked'] },
   },
 }
@@ -104,11 +126,28 @@ export const meta = {
 // ============================================================
 
 phase('接口清单')
-const context = args
+// 用户直接输入 /fe-api-integration 不带参数时 args 为 undefined，也可能只是一段文字；
+// 先归一化再取字段，否则脚本会在这里以 TypeError 直接失败。
+const context = typeof args === 'string'
+  ? { requirement: args }
+  : (args && typeof args === 'object' && !Array.isArray(args)) ? args : {}
+
+if (!context.requirement) {
+  log('🚫 未收到 requirement 入参，无法分析接口清单')
+  return {
+    status: 'invalid_args',
+    missing: ['requirement'],
+    apiList: [],
+    summary: '# 接口联调总结\n\n🚫 调用 fe-api-integration 时未传入 requirement，未执行任何分析或开发。请由编排方读取 triage/architecture/ui 产物后重新调用。',
+    nextStep: 'resolve_block',
+    canProceed: false,
+    message: '缺少 requirement 入参：请传入需求描述（建议同时传 architecture 与 uiCompleted）后重新调用',
+  }
+}
+
 log(`📋 需求: ${context.requirement}`)
 
 // 阶段1: 产出接口清单
-phase('接口清单')
 log('📝 分析并产出前端依赖接口清单...')
 
 const apiListPrompt = `你是前端开发者，分析需求并产出前端依赖接口清单。
@@ -153,11 +192,11 @@ const apiListSchema = {
   },
 }
 
-const apiListResult = await agent(apiListPrompt, {
+const apiListResult = (await agent(apiListPrompt, {
   label: 'api-list',
   phase: '接口清单',
   schema: apiListSchema,
-})
+})) || {}
 
 log('📋 接口清单产出完成')
 log(`📊 总接口数: ${apiListResult.totalCount || 0}`)
@@ -196,7 +235,7 @@ ${context.requirement}
 ## 接口清单
 ${JSON.stringify(apiListResult.apiList, null, 2)}
 
-## 已有UI代码
+## 已有UI代码（其文件清单即为「需求涉及文件」的基准）
 ${context.uiCompleted || '无'}
 
 请执行接口联调开发，并输出：
@@ -206,14 +245,16 @@ ${context.uiCompleted || '无'}
   "completed": ["已完成的联调项"],
   "pending": ["待联调的项（如有）"],
   "issues": ["联调中发现的问题"],
+  "completedFiles": ["实际改动的文件，与 git status 一致"],
+  "outOfScopeChanges": [{"file": "需求清单外被触碰的文件", "reason": "理由"}],
   "integrationStatus": "complete/partial/blocked"
 }`
 
-const integrationResult = await agent(integrationPrompt, {
+const integrationResult = (await agent(integrationPrompt, {
   label: 'api-integration',
   phase: '联调开发',
   schema: INTEGRATION_SCHEMA,
-})
+})) || { integrationStatus: 'blocked', issues: ['联调 agent 未返回结构化结果'] }
 
 log('✅ 接口联调完成')
 log(`📊 完成度: ${integrationResult.completed?.length || 0}项`)
@@ -251,11 +292,11 @@ const testSchema = {
   },
 }
 
-const testResult = await agent(testPrompt, {
+const testResult = (await agent(testPrompt, {
   label: 'e2e-test',
   phase: '端到端验证',
   schema: testSchema,
-})
+})) || { overallStatus: 'fail', blockers: ['验证 agent 未返回结构化结果'] }
 
 if (testResult.overallStatus === 'pass') {
   log('✅ 端到端验证通过')
@@ -292,6 +333,14 @@ ${(integrationResult.completed || []).map(t => `- ${t}`).join('\n') || '无'}
 ### 待完成
 ${(integrationResult.pending || []).map(t => `- ${t}`).join('\n') || '无'}
 
+### 实际改动文件（应与 git status 一致）
+${(integrationResult.completedFiles || []).map(f => `- \`${f}\``).join('\n') || '无'}
+
+### ⚠️ 需求清单外被触碰的文件
+${(integrationResult.outOfScopeChanges || []).length > 0
+  ? `| 文件 | 理由 |\n|------|------|\n${integrationResult.outOfScopeChanges.map(o => `| \`${o.file}\` | ${o.reason || '未说明'} |`).join('\n')}`
+  : '无'}
+
 ## 端到端验证
 | 测试项 | 结果 |
 |--------|------|
@@ -309,7 +358,7 @@ ${testResult.blockers.map(b => `- ${b}`).join('\n')}
 ## 下一步
 ${integrationResult.integrationStatus === 'blocked' || testResult.overallStatus === 'fail'
   ? '存在阻塞问题，需解决后重新联调'
-  : '联调完成，可以进入代码架构Review阶段'}
+  : '联调完成。请编排方向用户确认本阶段是否还有调整，再进入代码架构Review阶段'}
 `
 
 log('📝 联调总结已生成')
@@ -322,6 +371,8 @@ return {
   completed: integrationResult.completed || [],
   pending: integrationResult.pending || [],
   issues: integrationResult.issues || [],
+  completedFiles: integrationResult.completedFiles || [],
+  outOfScopeChanges: integrationResult.outOfScopeChanges || [],
   integrationStatus: integrationResult.integrationStatus,
   testResults: testResult.testResults || [],
   overallStatus: testResult.overallStatus,

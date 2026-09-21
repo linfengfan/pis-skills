@@ -1,7 +1,9 @@
 /**
  * 代码架构Review Workflow
- * 基于代码审核者的精华 prompt
  * 七维度并行打分，80分红线；出现任一 🔴 致命问题一律不通过
+ *
+ * 「代码评审终审官」只是下方内联 prompt 里的角色名，不是外部 Skill/Agent，
+ * 不要用 Skill(代码审核者) 之类的方式去调用它。
  *
  * 本文件自包含：Workflow 运行时在隔离环境执行脚本，不提供文件系统访问，
  * 因此不能 import 外部模块。所有 prompt 与 schema 必须内联在本文件内。
@@ -60,10 +62,11 @@ const REVIEW_DISCIPLINE = `你是代码评审终审官，只负责**一个指定
 你捍卫代码库的长期可维护性。丢弃礼貌与迎合，只做纯工程判断：指出问题、给出修法、下结论。**你不改代码**。
 
 ## 锁定变更边界（先做这一步）
-- 用 git status/git diff 确定本次改动的**确切范围**，只审查变更内容及其直接影响面
+- 用 git status/git diff --stat/git diff 确定本次改动的**确切范围**，只审查变更内容及其直接影响面
 - **必须同时审查删除与修改的行**，不能只看新增
 - 读 CLAUDE.md/AGENTS.md 提取项目强制规范，**以项目规范为唯一评判基准**
 - 变更超过 15 个文件时，按模块分组审查
+- 留意 diff 里与需求无关的改动（整文件格式化、导入重排、顺手重命名/重构）：它们属于「爆炸半径」维度的审查对象，其他维度只需在 findings 里点名，不重复扣分
 
 ## 问题分级
 - \`critical\` 🔴 **致命**：必须修复才能合并。每条必须能指到具体行**并说明后果**（会导致什么现象/数据问题）
@@ -205,6 +208,9 @@ const REVIEW_DIMENSIONS = {
 2. 公共组件/工具/类型改动的波及范围
 3. 接口契约变更对其他页面的影响
 4. 变更是否有对应测试
+5. **越界改动**：diff 中是否混入与本次需求无关的改动——整文件格式化、导入重排、顺手重命名/重构、无关文件被触碰。用 git diff --stat 对比「需求涉及文件」与「实际改动文件」。
+   - 存在越界改动 → 记 minor，location 指到文件，fix 写「回退该文件/该段与需求无关的改动」
+   - 越界改动行数超过有效改动行数，或触碰了需求未涉及的公共文件 → 记 critical，后果写「真实改动被无关 diff 淹没，无法评审也无法安全回滚」
 
 **除打分外，必须填写这三个字段**：
 - changeSummary: 一句话概括这次改动干了什么
@@ -218,13 +224,27 @@ const REVIEW_DIMENSIONS = {
 // ============================================================
 
 phase('锁定边界')
-const context = args
-log(`📋 评审需求: ${context.requirement}`)
+// 用户直接输入 /fe-code-arch-review 不带参数时 args 为 undefined，也可能只是一段文字；
+// 先归一化再取字段，否则脚本会在这里以 TypeError 直接失败。
+const context = typeof args === 'string'
+  ? { requirement: args }
+  : (args && typeof args === 'object' && !Array.isArray(args)) ? args : {}
+
+const requirement = context.requirement
+  || '（调用方未提供需求描述。请从 git diff、commit message 以及 fe-reports/ 下最近的 triage/architecture 报告推断本次改动意图；「与需求不符」类判断置信度降低，务必写进 pendingConfirmations）'
+if (!context.requirement) {
+  log('⚠️ 未收到 requirement 入参，评审员将从 diff 与已有报告推断需求，结论置信度降低')
+}
+
+log(`📋 评审需求: ${requirement}`)
 log(`📁 代码范围: ${context.changeScope || '全部变更'}`)
 log(`🔁 评审轮次: 第${context.round || 1}轮`)
 
 const changeScope = context.changeScope || '请用 git diff 自行确定全部变更范围'
 const profile = context.projectContext || '（未提供项目画像，请按同目录既有代码的写法推断项目规范）'
+const requirementFiles = Array.isArray(context.requirementFiles) && context.requirementFiles.length > 0
+  ? context.requirementFiles.map(f => `- ${f}`).join('\n')
+  : '（未提供，请从架构方案文件清单或 triage 影响面推断；无法推断时按 diff 全集视为需求涉及文件，并在 pendingConfirmations 注明）'
 
 // 阶段2: 七维度并行审查
 phase('分级审查')
@@ -244,10 +264,13 @@ ${dim.prompt.replace('{profile}', profile)}
 ---
 
 ## 待评审需求
-${context.requirement}
+${requirement}
 
 ## 变更范围
 ${changeScope}
+
+## 需求涉及文件（判断越界改动的基准）
+${requirementFiles}
 
 ## 本维度满分
 ${dim.maxScore} 分
@@ -383,6 +406,7 @@ const report = `# 代码架构Review报告
 | 字段 | 值 |
 |------|-----|
 | 评审类型 | 代码架构Review（七维度并行） |
+| 评审需求 | ${context.requirement || '⚠️ 未提供，由评审员从 diff 推断'} |
 | 评审轮次 | 第${context.round || 1}轮 |
 | 变更范围 | ${changeScope} |
 | 评审时间 | ${new Date().toISOString()} |
