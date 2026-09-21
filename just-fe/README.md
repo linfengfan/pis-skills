@@ -313,9 +313,17 @@ lint / 类型检查 / 单测 / E2E 这类能被工具证明的事，交给工具
 
 ## 8. 卸载
 
+完整流程见 [`UNINSTALL.md`](./UNINSTALL.md)——给 AI 的逐步指令，覆盖 Skill / Workflow / Plugin / 配置残留四种形态的探测、删除与校验，并把 `fe-reports/`、`.claude/fe-profile.md` 这类用户数据单独列为「只问不删」。让模型读它即可：
+
+```
+读 just-fe/UNINSTALL.md，把 just-fe 从我的配置里彻底删掉
+```
+
+只装了模式 A/B 的最短路径：
+
 ```bash
 rm -rf ~/.claude/skills/just-fe
-rm -f  ~/.claude/workflows/{triage,architecture,architecture-review,ui-implementation,api-integration,code-arch-review,test-assessment}-workflow.js
+grep -ls "name: 'fe-" ~/.claude/workflows/*.js | xargs -r rm -v   # 按 meta.name 识别，不按文件名
 ```
 
 Plugin 模式：`/plugin uninstall pis-fe`。
@@ -327,6 +335,7 @@ just-fe/
 ├── SKILL.md                              # 入口：流程编排、阶段闸门、设计稿闸门、点名阶段、评分铁律
 ├── MEMORY.md                             # 流程状态模板（复制到 fe-reports/{需求}/ 后使用；current_stage / design / 闸门记录）
 ├── README.md                             # 本文件
+├── UNINSTALL.md                          # 给 AI 的卸载指令：探测四种安装形态 → 删除 → 校验，用户数据只问不删
 ├── scripts/                              # 7 个 Dynamic Workflow 脚本，每个自包含（无 import，见 §7.1）
 │   ├── triage-workflow.js                #   fe-triage
 │   ├── architecture-workflow.js          #   fe-architecture
