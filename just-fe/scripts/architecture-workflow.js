@@ -1,5 +1,17 @@
+export const meta = {
+  name: 'fe-architecture',
+  description: '前端架构设计：文件规划、组件树、状态归属、接口契约',
+  phases: [
+    { title: '约束提取', detail: '读取项目规范，勘查同类实现' },
+    { title: '方案设计', detail: '模块划分、状态管理、接口契约' },
+    { title: '任务卡拆解', detail: '拆解为可执行的任务卡' },
+  ],
+}
+
 /**
  * 架构设计 Workflow
+ *
+ * ⚠️ `export const meta` 必须是文件第一条语句（Workflow 运行时按此识别脚本，否则不会注册、按名调用报 not found）。
  *
  * 「前端架构师」只是下方内联 prompt 里的角色名，不是外部 Skill/Agent，
  * 不要用 Skill(前端架构师) 之类的方式去调用它。
@@ -76,16 +88,6 @@ const ARCHITECTURE_SCHEMA = {
     requirementIssues: { type: 'array', description: '需求不足项' },
   },
   required: ['overview', 'fileList'],
-}
-
-export const meta = {
-  name: 'fe-architecture',
-  description: '前端架构设计：文件规划、组件树、状态归属、接口契约',
-  phases: [
-    { title: '约束提取', detail: '读取项目规范，勘查同类实现' },
-    { title: '方案设计', detail: '模块划分、状态管理、接口契约' },
-    { title: '任务卡拆解', detail: '拆解为可执行的任务卡' },
-  ],
 }
 
 // ============================================================

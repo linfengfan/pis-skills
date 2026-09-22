@@ -1,14 +1,3 @@
-/**
- * 代码架构Review Workflow
- * 七维度并行打分，80分红线；出现任一 🔴 致命问题一律不通过
- *
- * 「代码评审终审官」只是下方内联 prompt 里的角色名，不是外部 Skill/Agent，
- * 不要用 Skill(代码审核者) 之类的方式去调用它。
- *
- * 本文件自包含：Workflow 运行时在隔离环境执行脚本，不提供文件系统访问，
- * 因此不能 import 外部模块。所有 prompt 与 schema 必须内联在本文件内。
- */
-
 export const meta = {
   name: 'fe-code-arch-review',
   description: '代码架构Review：代码审核者标准，七维度并行打分，80分红线，致命问题一票否决',
@@ -18,6 +7,19 @@ export const meta = {
     { title: '评分结论', detail: '加权汇总，输出评分与合并/打回结论' },
   ],
 }
+
+/**
+ * 代码架构Review Workflow
+ * 七维度并行打分，80分红线；出现任一 🔴 致命问题一律不通过
+ *
+ * ⚠️ `export const meta` 必须是文件第一条语句（Workflow 运行时按此识别脚本，否则不会注册、按名调用报 not found）。
+ *
+ * 「代码评审终审官」只是下方内联 prompt 里的角色名，不是外部 Skill/Agent，
+ * 不要用 Skill(代码审核者) 之类的方式去调用它。
+ *
+ * 本文件自包含：Workflow 运行时在隔离环境执行脚本，不提供文件系统访问，
+ * 因此不能 import 外部模块。所有 prompt 与 schema 必须内联在本文件内。
+ */
 
 // ============================================================
 // 内联 Schema

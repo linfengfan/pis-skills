@@ -110,12 +110,15 @@ cp "$SRC"/scripts/*-workflow.js "$CFG/workflows/"
 find "$CFG/workflows" -maxdepth 1 -name '*.js' -exec grep -ls "name: '\($FE_NAMES\)'" {} \; 2>/dev/null | wc -l   # 应为 7
 find "$CFG/workflows" -maxdepth 1 -name '*-workflow.js' -exec grep -l '^import' {} \; 2>/dev/null                # 应无输出
 find "$CFG/workflows" -maxdepth 1 -name '*-workflow.js' -exec grep -ln 'new Date\|Date\.now\|Math\.random' {} \; 2>/dev/null   # 应无输出（有则是旧脚本，会在拼报告时崩）
+for f in "$CFG"/workflows/*-workflow.js; do head -1 "$f" | grep -q '^export const meta = {' || echo "meta 不在首行，不会被注册: $f"; done   # 应无输出
 for f in "$SRC"/scripts/*-workflow.js; do
   node --check <(printf 'async function __w(){\n'; sed 's/^export const meta = {/const meta = {/' "$f"; printf '}\n') && echo "syntax OK $(basename "$f")"
 done
 ```
 
 `node --check` 要包一层 async 函数：脚本体里的顶层 `return` 由运行时提供，直接检查会报 `Illegal return statement`，那是正常的。
+
+**模式 B 现在是可选项。** SKILL.md 首选用 `Workflow` 工具的 `scriptPath` 直接跑 Skill 目录里的脚本，不依赖 `.claude/workflows/` 注册表；复制到 `.claude/workflows/` 只带来两样东西：`/fe-*` 斜杠命令补全，以及能用 `Workflow(fe-triage)` 权限规则永久放行（`scriptPath` 方式每阶段弹一次审批）。注册表在**会话启动时**构建，复制后必须新开会话才能按名找到。
 
 装完让用户**新开一个 Claude Code 会话**，输入 `/` 确认补全里出现 `fe-triage`、`fe-architecture`、`fe-architecture-review`、`fe-ui-implementation`、`fe-api-integration`、`fe-code-arch-review`、`fe-test-assessment` 7 个命令（命令名取自 `meta.name`，不是文件名）。可选冒烟：`/fe-triage 冒烟测试：给列表页加一个刷新按钮`——会真的派 agent，消耗 token。
 
@@ -203,8 +206,8 @@ fi
 
 | 情况 | 限制 |
 |------|------|
-| 只装了 A（未装 B） | 7 个脚本只是被模型当作流程规格阅读，`parallel()` 并行打分与隔离上下文不生效，评审退化成主对话里的一次判断。装 B 才真跑 |
-| 装了 B | Workflow 运行中**不能向用户提问**（官方运行时限制），所以「进不进下一阶段」「要设计稿」这些拍板都发生在两次 Workflow 调用之间，用户会在每个阶段结束被问一次；不想被问用 `--auto` |
+| 环境里没有 `Workflow` 工具（Cursor、旧版、Pro 未开） | 走模式 A：按 `references/模式A执行手册.md` 派子 agent 跑同一套 prompt 与公式。并行与隔离靠模型自觉，主对话多占上下文；产物、闸门、评分口径与模式 B 一致 |
+| 环境里有 `Workflow` 工具 | SKILL.md 用 `scriptPath` 直接跑 Skill 目录里的脚本，**不依赖是否复制到 `.claude/workflows/`**。每阶段弹一次「Review workflow before running」审批。Workflow 运行中**不能向用户提问**（官方运行时限制），所以「进不进下一阶段」「要设计稿」这些拍板都发生在两次 Workflow 调用之间；不想被问用 `--auto` |
 | Pro 计划 | 需在 Claude Code `/config` 打开 Dynamic workflows，否则 `/fe-*` 命令不可用 |
 | Cursor | 无 Dynamic Workflow 运行时，等价于只装 A |
 | 所有形态 | 打分是模型判断，不是确定性检查；lint / 类型 / 单测 / E2E 由 ⑦ 阶段交给工具跑，评分只覆盖工具管不到的层面，不能替代 CI |
@@ -214,6 +217,7 @@ fi
 
 ## 附 · 脚本硬约束（改脚本前必读，安装不需要）
 
+- **`export const meta = {…}` 必须是文件第一条语句**。运行时的 metaParser 允许前面有注释，但不允许任何语句（一个 `const` 就够让它拒绝）；不满足的脚本不会进注册表，按 `name` 调用报 not found，`scriptPath` 调用报 `Script must begin with export const meta`。这是 2026-09-22 之前「Workflow 模式经常不可用」的真实根因——7 个脚本里只有 ⑥ 是「注释→meta」能跑，其余 6 个都是「注释→`const`→meta」从没注册成功。本项目约定 **meta 放第一行、注释放它后面**，自查：`for f in scripts/*.js; do head -1 "$f" | grep -q '^export const meta' || echo "FAIL $f"; done`
 - **单文件自包含**：Workflow 脚本在隔离环境执行，没有文件系统与 shell 权限，**不能出现任何 `import`**，prompt 与 schema 一律内联。Step 2 校验里的 `grep '^import'` 就是查这条。
 - **`FRONTEND_DEV_SYSTEM` 有两份副本**（`ui-implementation-workflow.js` 与 `api-integration-workflow.js`），运行时限制导致无法共享。改一处必须同步另一处，两处文件头有警示注释。自查：
 

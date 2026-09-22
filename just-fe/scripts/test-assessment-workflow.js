@@ -1,7 +1,19 @@
+export const meta = {
+  name: 'fe-test-assessment',
+  description: '测试评估：先跑 E2E/回归取证，再评需求覆盖/边界/异常/回归/代码质量，80分红线，验收失败一票否决',
+  phases: [
+    { title: 'E2E 执行', detail: '定位验证手段，逐条验收标准取证，跑回归' },
+    { title: '综合评估', detail: '以工具证据为基准五维度打分' },
+    { title: '评估结论', detail: '80 分红线 + E2E/回归一票否决' },
+  ],
+}
+
 /**
  * 测试评估 Workflow
  * 先跑 E2E / 回归取证，再对需求和代码变更做完整度评估
  * 80分红线；任一验收标准 E2E 失败或回归门禁失败 → 一票否决，不看总分
+ *
+ * ⚠️ `export const meta` 必须是文件第一条语句（Workflow 运行时按此识别脚本，否则不会注册、按名调用报 not found）。
  *
  * 「E2E 验证执行者」「测试评估专家」只是下方内联 prompt 里的角色名，不是外部 Skill/Agent，
  * 不要用 Skill(测试评估专家) 之类的方式去调用它。
@@ -186,16 +198,6 @@ const TEST_ASSESSMENT_SCHEMA = {
     manualVerificationPoints: { type: 'array' },
   },
   required: ['totalScore', 'finalScore', 'requirementCoverage'],
-}
-
-export const meta = {
-  name: 'fe-test-assessment',
-  description: '测试评估：先跑 E2E/回归取证，再评需求覆盖/边界/异常/回归/代码质量，80分红线，验收失败一票否决',
-  phases: [
-    { title: 'E2E 执行', detail: '定位验证手段，逐条验收标准取证，跑回归' },
-    { title: '综合评估', detail: '以工具证据为基准五维度打分' },
-    { title: '评估结论', detail: '80 分红线 + E2E/回归一票否决' },
-  ],
 }
 
 // ============================================================

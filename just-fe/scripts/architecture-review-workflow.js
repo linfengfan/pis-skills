@@ -1,7 +1,19 @@
+export const meta = {
+  name: 'fe-architecture-review',
+  description: '架构方案评审：六维度打分，80分红线，低于打回重写',
+  phases: [
+    { title: '方案分析', detail: '读取方案文档' },
+    { title: '多维评审', detail: '六维度并行评审' },
+    { title: '综合评分', detail: '汇总得分，输出结论' },
+  ],
+}
+
 /**
  * 架构方案评审 Workflow
  * 对架构方案进行评审打分
  * 80分红线，低于80分打回重写
+ *
+ * ⚠️ `export const meta` 必须是文件第一条语句（Workflow 运行时按此识别脚本，否则不会注册、按名调用报 not found）。
  *
  * 本文件自包含：Workflow 运行时在隔离环境执行脚本，不提供文件系统访问，
  * 因此不能 import 外部模块。所有 prompt 与 schema 必须内联在本文件内。
@@ -22,16 +34,6 @@ const DIMENSION_SCHEMA = {
     recommendation: { type: 'string' },
   },
   required: ['dimension', 'score', 'maxScore'],
-}
-
-export const meta = {
-  name: 'fe-architecture-review',
-  description: '架构方案评审：六维度打分，80分红线，低于打回重写',
-  phases: [
-    { title: '方案分析', detail: '读取方案文档' },
-    { title: '多维评审', detail: '六维度并行评审' },
-    { title: '综合评分', detail: '汇总得分，输出结论' },
-  ],
 }
 
 // ============================================================

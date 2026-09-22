@@ -1,5 +1,17 @@
+export const meta = {
+  name: 'fe-triage',
+  description: '前端需求梳理：歧义拆解、结构化输出',
+  phases: [
+    { title: '现状勘查', detail: '读取项目上下文，定位既有实现' },
+    { title: '歧义拆解', detail: '列出不明确、自相矛盾、隐含假设的点' },
+    { title: '结构化输出', detail: '产出结构化需求文档' },
+  ],
+}
+
 /**
  * 需求梳理 Workflow
+ *
+ * ⚠️ `export const meta` 必须是文件第一条语句（Workflow 运行时按此识别脚本，否则不会注册、按名调用报 not found）。
  *
  * 「需求梳理分析师」只是下方内联 prompt 里的角色名，不是外部 Skill/Agent，
  * 不要用 Skill(需求梳理分析师) 之类的方式去调用它。
@@ -80,16 +92,6 @@ const REQUIREMENT_SCHEMA = {
     blockReason: { type: 'string', description: '如果有逻辑死锁，说明原因' },
   },
   required: ['oneSentenceGoal', 'scope', 'uiChange'],
-}
-
-export const meta = {
-  name: 'fe-triage',
-  description: '前端需求梳理：歧义拆解、结构化输出',
-  phases: [
-    { title: '现状勘查', detail: '读取项目上下文，定位既有实现' },
-    { title: '歧义拆解', detail: '列出不明确、自相矛盾、隐含假设的点' },
-    { title: '结构化输出', detail: '产出结构化需求文档' },
-  ],
 }
 
 // ============================================================

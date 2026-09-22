@@ -188,7 +188,7 @@
 
 ## 7. 注意事项
 
-- **只装了 Skill、没装 Workflow 脚本时**（INSTALL.md 模式 A），打分不是真并行：评审退化成主对话里的一次判断，隔离性靠模型自觉。要真跑并行打分请装模式 B 或 C。
+- **两种运行模式，自动切换。** 有 `Workflow` 工具（Claude Code ≥ 2.1.154，Pro 需在 `/config` 开 Dynamic workflows）时，每个阶段在隔离运行时里跑，评审维度真并行、零 token 汇总；没有（Cursor、旧版）时按 `references/模式A执行手册.md` 派子 agent 执行同一套 prompt 与公式。两种模式下产物、闸门、评分口径完全一致，只是模式 A 的并行和隔离靠模型自觉，主对话会多占一些上下文。
 - **打分是模型判断，不是确定性检查。** lint、类型检查、单测、E2E 这些能被工具证明的事，⑦ 阶段会交给工具跑；评分覆盖的是工具管不到的架构与需求层面。它能压住最坏情况，不能替代 CI。
 - **Cursor 用户**：Skill 结构兼容，放到 `~/.cursor/skills/just-fe/` 即可；但 Cursor 没有 Dynamic Workflow 运行时，等价于模式 A。
 - **未做过真实运行时的端到端验证。** 脚本逻辑用桩运行时测过，编排协议用子 agent 场景推演过，但没在真实 Claude Code 里完整跑过七个阶段。遇到问题欢迎记到 `todo.md`。
@@ -207,5 +207,5 @@ just-fe/
 ├── todo.md          # 使用反馈与处理记录
 ├── scripts/         # 7 个阶段的 Dynamic Workflow 脚本
 ├── templates/       # 项目画像 / 需求报告 / 方案 / 评分协议 / 变更日志 的格式
-└── references/      # 项目画像初始化、需求分诊六关、四角色并行分析
+└── references/      # 项目画像初始化、需求分诊六关、四角色并行分析、模式 A 执行手册（无 Workflow 工具时）
 ```

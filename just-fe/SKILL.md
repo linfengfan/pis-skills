@@ -100,8 +100,8 @@ description: 当用户要开发前端功能、做前端需求分析或方案评�
 
 | 模式 | 判定 | 每个阶段怎么跑 |
 |------|------|--------------|
-| **B/C · Workflow 可用** | 输入 `/` 能补全出 `fe-triage` 等 7 个命令，或 `Workflow` 工具按 `name` 调用 `fe-triage` 不报 not found | 用 `Workflow` 工具调用下表的 `fe-*` 名称，**带齐入参** |
-| **A · 只装了 Skill** | 上述命令不存在 | 读 `scripts/<阶段>-workflow.js`，把其中的 system prompt 常量（如 `FRONTEND_DEV_SYSTEM`）连同「主流程」里拼装的入参，交给一个子 agent（`Agent` 工具）执行；脚本里的 JS 汇总逻辑（加权、判定、报告拼装）由你手工完成。打分类阶段（③⑥⑦）的多维度要**同一批并行**派出多个子 agent，每个只负责一个维度 |
+| **B · Workflow 工具在** | 当前会话的工具列表里有 `Workflow`（别名 `RunWorkflow`）。**只看工具在不在，不要用「`/` 补全里有没有 `fe-triage`」或「按 name 调一下试试」来判定** | 用 `Workflow` 工具 + `scriptPath` 直接跑本 Skill 目录里的脚本，**带齐入参** |
+| **A · 没有 Workflow 工具**（Cursor、旧版 Claude Code、Pro 未开 Dynamic workflows） | 工具列表里没有 `Workflow` | **REQUIRED：先读 `references/模式A执行手册.md`**，按其中该阶段的「阶段卡」执行：`Read` 脚本取 prompt/schema 常量 → 按卡片拼 prompt、派 `Agent` 子 agent（③⑥ 多维度同一批并行）→ 按卡片公式汇总 → 照脚本 `report` 模板写报告。脚本仍是唯一真源，手册只管「去哪取、怎么拼、怎么算」 |
 
 两种模式下产物路径、闸门、评分铁律完全一致。模式 A 下 `parallel()` 的隔离性靠你手工保证：不要把一个维度的结论喂给另一个维度的评审员。
 
@@ -109,15 +109,24 @@ description: 当用户要开发前端功能、做前端需求分析或方案评�
 
 **调用任何工具之前先看它的参数描述**，下面是两种模式各自的正确形态，以及最常见的参数错误。
 
-模式 B/C，`Workflow` 工具的参数是 `name` + `args`（另有 `script` / `scriptPath` / `resumeFromRunId`，三选一提供 `name` / `script` / `scriptPath`）：
+模式 B，`Workflow` 工具三选一提供 `scriptPath` / `name` / `script`，外加 `args`。**首选 `scriptPath`**——它直接读磁盘上的脚本，不经过「已注册 workflow」名册，不需要把脚本复制到 `.claude/workflows/`，也不需要新开会话：
 
 ```json
-{ "name": "fe-triage", "args": { "requirement": "<需求原文>", "projectContext": "<fe-profile 全文>" } }
+{ "scriptPath": "<本 Skill 目录>/scripts/triage-workflow.js", "args": { "requirement": "<需求原文>", "projectContext": "<fe-profile 全文>", "timestamp": "2026-09-22T02:00:00Z" } }
 ```
+
+`<本 Skill 目录>` 是这份 SKILL.md 所在的绝对路径；不确定就找：
+
+```bash
+find ~/.claude/skills ./.claude/skills ~/.cursor/skills -path '*/just-fe/scripts/triage-workflow.js' 2>/dev/null
+```
+
+`name` 方式（`{ "name": "fe-triage", "args": {...} }`）只在脚本已复制到 `~/.claude/workflows/` 或 `<项目>/.claude/workflows/` **且是在那之后新开的会话**里才可用——注册表在会话启动时构建，会话中途复制进去的脚本要到下一个会话才能按名找到。所以 not found 不代表模式 B 不可用，改 `scriptPath` 即可。
 
 - `args` 必须是**对象**，不要 `JSON.stringify` 成字符串
 - **每次调用都带 `timestamp`**（先用 Bash 跑 `date -u +%FT%TZ` 取值，放进 `args`）。Workflow 脚本里禁止 `Date` / `Math.random`（运行时为了可 resume 强制确定性，调用即整段失败），所以报告里的时间只能由你传进去；不传则报告时间字段留占位文字
-- 按 `name` 报 not found 但 `~/.claude/workflows/` 里确实有脚本 → 改用 `scriptPath` 指向该文件；若脚本随后返回 `invalid_args`，是运行时已知 bug（`scriptPath` 方式丢 `args`），停下告知用户升级 Claude Code 或改走模式 A
+- `scriptPath` 方式若脚本返回 `invalid_args`（你明明传了 `args`），是旧版运行时的已知 bug（`scriptPath` 丢 `args`）：改用 `script`——用 Read 读脚本全文，作为 `script` 参数原样传入，`args` 照传
+- `scriptPath` / `script` 方式每次都会弹一次「Review workflow before running」审批（只有 `name` 方式能被永久放行）；一个阶段一次，和闸门节奏一致，正常
 - **Workflow 在后台异步运行**：工具立刻返回 `status: 'async_launched'` 和 `taskId`，结果在跑完后自动回到会话。此时你该做的是**等**——不要空参调 `TaskOutput`（会报 `Task ID is required`），也不要反复轮询（每次轮询都占主上下文）。确需看进度：`TaskOutput` 带上返回的 `taskId`，或让用户打开 `/workflows` 看
 
 模式 A，`Agent` 工具的必填参数是 `description`、`prompt`、`subagent_type`，**没有** `label` / `schema` / `phase`——那三个是 Workflow 脚本内 `agent()` 的选项，照搬过来就是 `Invalid tool parameters`。对应关系：
@@ -138,7 +147,8 @@ description: 当用户要开发前端功能、做前端需求分析或方案评�
 | 报错 | 含义 | 处理 |
 |------|------|------|
 | `Invalid tool parameters` | **参数名或类型错**，不是工具不可用 | 重新读该工具的参数描述，按上面的形态改一次再调。仍报错 → 把工具名、你传的参数、错误原文一起停下告诉用户 |
-| `Unknown workflow` / not found | 模式 B 没装或按 `name` 解析失败 | 试 `scriptPath`；再不行按模式 A 走 |
+| `No workflow named 'fe-…'` / not found | 按 `name` 找不到：脚本没复制到 `.claude/workflows/`，或复制后没新开会话 | **不是模式 B 不可用。** 改 `scriptPath` 指向本 Skill 目录里的脚本，继续走模式 B |
+| `Script must begin with export const meta` | 脚本第一条语句不是 `export const meta`（当前版本已修正；出现说明装的是旧脚本） | 按 INSTALL.md Step 4 升级 |
 | `Unknown skill` | 调了不存在的 Skill | 见上一节，改用 Workflow 或 `Agent` |
 | `Task ID is required` | 空参调了 `TaskOutput` | 用 Workflow 返回的 `taskId`，或干脆等完成通知 |
 | `Date.now() / new Date() are unavailable in workflow scripts` | 脚本里用了 `Date`（当前版本已移除；出现说明装的是旧脚本） | 按 INSTALL.md Step 4 升级脚本；这一轮的评审结果已丢，需重跑该阶段 |
@@ -160,11 +170,11 @@ description: 当用户要开发前端功能、做前端需求分析或方案评�
 | ⑥代码Review | `fe-code-arch-review` | `requirement`、`changeScope`（如 `git diff main...HEAD`）、`round` | `projectContext`、`requirementFiles`（②文件清单 + ④⑤ `completedFiles`，用于判越界改动） | `passed===false` 带 `criticalIssues`+`minorIssues` 回④⑤，`round+1`，最多 2 轮 |
 | ⑦测试评估 | `fe-test-assessment` | `requirement`、`acceptanceCriteria`（① 的验收标准）、`changeScope`、`round` | `projectContext`（含 e2e/test 门禁命令）、`e2eCommand`、`devServerCommand`、`baseUrl`、`skipE2E` | `passed===false` 回②④⑤，`round+1`，最多 2 轮；`e2eVeto===true` 时先修失败项 |
 
-单阶段调用形态（`Workflow` 工具，`args` 是对象）：
+单阶段调用形态（`Workflow` 工具，`scriptPath` 指向本 Skill 目录，`args` 是对象）：
 
 ```json
 {
-  "name": "fe-code-arch-review",
+  "scriptPath": "<本 Skill 目录>/scripts/code-arch-review-workflow.js",
   "args": {
     "requirement": "<triage 报告「一句话目标」+ 验收标准>",
     "changeScope": "git diff main...HEAD",
@@ -254,6 +264,7 @@ description: 当用户要开发前端功能、做前端需求分析或方案评�
 | 「`Agent` 工具报 `Invalid tool parameters`，Workflow 也不行，我自己在主上下文里做吧」 | 参数错 ≠ 工具不可用。按「工具怎么调」改参数重试一次；仍失败就停下把报错交给用户。禁止退化成主上下文直接干 |
 | 「把 `label` / `schema` 传给 `Agent` 工具」 | 那是脚本内 `agent()` 的选项。`Agent` 工具只认 `description` / `prompt` / `subagent_type`，schema 要写进 prompt |
 | 「Workflow 启动了，我调 `TaskOutput` 看看跑到哪了」 | 后台跑完会自动回来。空参 `TaskOutput` 报错，反复轮询浪费上下文。等 |
+| 「`Workflow` 按 name 找不到 fe-triage，所以 Workflow 模式不可用，切模式 A」 | 名册在会话启动时构建，找不到是注册问题不是工具问题。只要工具列表里有 `Workflow`，用 `scriptPath` 直接跑脚本 |
 | 「顺手把这个文件格式化一下」 | 越界改动。开发 agent 只改需求涉及文件，Review 会把它记成问题 |
 | 「测试评估看代码就能打分」 | 先跑 E2E/回归取证。没有工具证据的验收标准只能算 unverified |
 | 「汇报时说『当前在 UI 开发阶段』」 | 先读 MEMORY.md 的 `current_stage`，不凭记忆 |
@@ -273,4 +284,5 @@ description: 当用户要开发前端功能、做前端需求分析或方案评�
 | `references/项目画像初始化.md` | 项目画像缺失，需要探测技术栈与门禁命令时 |
 | `references/需求分诊.md` | ①需要六维度澄清清单与六关筛选口径时 |
 | `references/前端功能团队.md` | 中大型改动想用四角色并行分析加强②时（可选增强） |
-| `scripts/*-workflow.js` | 模式 A 下需要取出各阶段 system prompt 与汇总逻辑时；模式 B/C 下不需要读 |
+| `references/模式A执行手册.md` | **没有 `Workflow` 工具时必读**：每阶段取哪些常量、prompt 怎么拼、子 agent 派几个、分数怎么算 |
+| `scripts/*-workflow.js` | 模式 B 下作为 `scriptPath` 直接跑；模式 A 下按手册 `Read` 取 prompt / schema / 报告模板 |

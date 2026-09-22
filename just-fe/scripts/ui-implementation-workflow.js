@@ -1,5 +1,17 @@
+export const meta = {
+  name: 'fe-ui-implementation',
+  description: '前端UI开发：基于设计稿开发页面UI（Mock 数据）',
+  phases: [
+    { title: '准入检查', detail: '确认需求与设计稿输入齐全' },
+    { title: '组件开发', detail: '防御扫描、强契约、职责单一、状态收敛' },
+    { title: '开发报告', detail: '改动清单、越界自查、下一步' },
+  ],
+}
+
 /**
  * 页面UI开发 Workflow
+ *
+ * ⚠️ `export const meta` 必须是文件第一条语句（Workflow 运行时按此识别脚本，否则不会注册、按名调用报 not found）。
  *
  * 「资深前端开发工程师」只是下方内联 prompt 里的角色名，不是外部 Skill/Agent，
  * 不要用 Skill(前端开发工程师) 之类的方式去调用它。
@@ -83,16 +95,6 @@ const UI_DEV_SCHEMA = {
     blockReason: { type: 'string', description: '如果有逻辑死锁' },
     quality: { type: 'string', enum: ['high', 'medium', 'low'] },
   },
-}
-
-export const meta = {
-  name: 'fe-ui-implementation',
-  description: '前端UI开发：基于设计稿开发页面UI（Mock 数据）',
-  phases: [
-    { title: '准入检查', detail: '确认需求与设计稿输入齐全' },
-    { title: '组件开发', detail: '防御扫描、强契约、职责单一、状态收敛' },
-    { title: '开发报告', detail: '改动清单、越界自查、下一步' },
-  ],
 }
 
 // ============================================================

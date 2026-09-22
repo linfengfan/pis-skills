@@ -1,5 +1,18 @@
+export const meta = {
+  name: 'fe-api-integration',
+  description: '前端接口联调：产出接口清单 + 基于开发工程师标准的联调开发',
+  phases: [
+    { title: '接口清单', detail: '分析需求，产出前端依赖接口清单' },
+    { title: '防御检查', detail: '竞态、幂等、异常处理' },
+    { title: '联调开发', detail: '接入真实接口' },
+    { title: '端到端验证', detail: '数据流验证' },
+  ],
+}
+
 /**
  * 接口联调 Workflow
+ *
+ * ⚠️ `export const meta` 必须是文件第一条语句（Workflow 运行时按此识别脚本，否则不会注册、按名调用报 not found）。
  *
  * 「资深前端开发工程师」只是下方内联 prompt 里的角色名，不是外部 Skill/Agent，
  * 不要用 Skill(前端开发工程师) 之类的方式去调用它。
@@ -108,17 +121,6 @@ const INTEGRATION_SCHEMA = {
     },
     integrationStatus: { type: 'string', enum: ['complete', 'partial', 'blocked'] },
   },
-}
-
-export const meta = {
-  name: 'fe-api-integration',
-  description: '前端接口联调：产出接口清单 + 基于开发工程师标准的联调开发',
-  phases: [
-    { title: '接口清单', detail: '分析需求，产出前端依赖接口清单' },
-    { title: '防御检查', detail: '竞态、幂等、异常处理' },
-    { title: '联调开发', detail: '接入真实接口' },
-    { title: '端到端验证', detail: '数据流验证' },
-  ],
 }
 
 // ============================================================
