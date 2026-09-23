@@ -26,3 +26,7 @@
 - #9 的修法是文档层的：给了正确参数形态和错误处理规则，但没法在真实 Claude Code 里验证 `Agent` 工具的参数名是否随版本变化。若再出现 `Invalid tool parameters`，把模型实际发出的参数 JSON 贴进来
 - #11 暴露了桩运行时的盲区：之前只模拟了 `agent/parallel/phase/log/args`，没模拟运行时的确定性约束。现已补 Date/Math.random 禁令；若官方再加别的限制（如 `setTimeout`、`fetch`），同样要补进桩里
 - 本机已装的 `~/.claude/workflows/` 脚本需要按 INSTALL.md Step 4 重新同步，否则 ⑥ 会继续在拼报告时崩
+
+
+
+1.开发子agent，一定会遇到问题，问题汇报给主agent，由用户来决策 
