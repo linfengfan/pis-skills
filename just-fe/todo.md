@@ -1,5 +1,38 @@
 # just-fe 使用反馈与处理记录
 
+## 2026-10-16 已处理（全栈改造，按 docs/全栈流程设计-20261016.md）
+
+| # | 问题 / 需求 | 处理 | 落点 |
+|---|------|------|------|
+| 28 | 用户裁定：不做 Codex 适配；「这么多文件味道不对」——要的是多 agent 工作流技能，不是软件工程 | **删除整个脚本层与生成器**：`src/`（49）、`agents/`（7 codex 已先于本条目删）、`build.js`、`tests/`、9 个 JS Workflow 脚本、`references/模式A执行手册.md`、`templates/{评分协议,需求梳理报告模板,架构方案模板}.md`。流程改为**单一执行方式**：编排者读 `stages/*.md` 阶段卡（人设 / schema / 公式 / 报告模板全部内联，内容自 JS 模板平移）派子 agent，模式 A/B 双轨、模式判定、注册表、scriptPath、模式 A 手册随之消失。`roles/fe-dev.md` 是 ④-FE 与 ⑤ 唯一共享人设（防漂移）。评分协议改为 `references/评分口径.md`（薄，维度以阶段卡为准）。最终 28 个文件 | `stages/`（9 张卡）、`roles/`、`references/`、SKILL.md、README.md、INSTALL.md、UNINSTALL.md |
+
+
+| # | 问题 / 需求 | 处理 | 落点 |
+|---|------|------|------|
+| 14 | 同一人设在 scripts / ~/.cursor/agents / ~/.codex/agents / 前端仓 .claude/agents 有 4～5 份定义，评分协议与脚本维度漂移，手册按行号引用脚本 | 建 `src/` 唯一真源：`roles/`（11 个人设）、`dims/`（5 组维度，配分合计强制 100）、`workflows/`（9 个模板，占位符 `__ROLE__ / __DIMS__ / __ARGS__ / __HEADER__`）、`agents/manifest.json`；`build.js` 生成 `scripts/`、`agents/cursor/`（只适配 Cursor，不做 Codex 适配，用户 2026-10-16 定）、`templates/评分协议.md`，`--check` 比对一致性并校验 meta 首行 / 无 import / 无 Date / 语法可编译；`FRONTEND_DEV_SYSTEM` 两份副本改为生成；手册改按常量名引用 | `src/`、`build.js`、`agents/`、`references/模式A执行手册.md` |
+| 15 | 桩运行时只在会话里跑过、没提交 | `tests/stub-runtime.js`（模拟 agent / parallel / phase / log，拒绝 Date / Math.random / meta 不在首行）+ `tests/run.js` 73 个用例：每脚本 4 种 args 形态 + agent 返回 null + lane 分支 + 关键判定（一票否决、分母规则、needs_* 前置） | `tests/` |
+| 16 | 评审类脚本按 agent 回填的 `dimension` 字段对应维度，agent 填错一个名字整张表归零（桩测试暴露） | 三个评审脚本改为按 `parallel` 保序下标对应，`dimension` 一律覆盖为 key | `src/workflows/{contract,architecture-review,code-arch-review}.js` |
+| 17 | 评分协议 70～79 同时是「条件通过」和「必须打回」；维度表与脚本不一致 | 评分协议改为由 `src/dims/` 生成，删掉「及格」档；维度表、一票否决、汇总公式、打回机制统一写入 | `src/templates/评分协议.md` → `templates/评分协议.md` |
+| 18 | 幽灵名字 `fe-guild` / `fe-profile-init` / `fe-feature-team`；`references/前端功能团队.md` 的四角色与 ③⑥ 重叠且无人触发 | 重写 `需求分诊.md`（route / stackScope / 范式接入）与 `项目画像初始化.md`（fe + be）；删除 `前端功能团队.md` | `references/` |
+| 19 | 加入后端：前后端分仓、契约先行、后端不能本地跑 | 新增 `dev-contract`（勘察 + 设计 + 3 维评审，Markdown + `json contract` 块）、`dev-be-implementation`（rd-dev 人设 + 变更边界 + 强制契约测试 + 收尾 compile/spotless/test）；`architecture` / `architecture-review` / `code-review` / `test-assessment` 加 `lane`；⑥ 每维 prompt 含「通用 / 前端 / 后端」三段清单；⑦ 取证者按栈选手段，后端需 DB 的路径标 unverified；新增 🚀 部署闸门（流程只产出合入命令） | `src/workflows/`、`src/roles/{contract-designer,be-architect,be-dev,verification-runner}.md`、`src/dims/{arch-review-be,contract-review}/`、SKILL.md |
+| 20 | ⑤ 的 `awaiting_apis` 等接口、无人设 `e2e-test` 与 ⑦ 重叠 | 重写 `dev-api-integration`：删 `api-list` / `e2e-test`；前置 `tools/contract-conformance.js` 对 dev 网关逐接口校验（字段 / 类型 / 可空 / 统一响应体）；FAIL 接口保留 Mock 不做前端补丁，不进 ⑥ | `src/workflows/api-integration.js`、`src/roles/integration-addendum.md`、`tools/contract-conformance.js` |
+| 21 | 越界改动靠评审员读 diff 判断 | `tools/out-of-scope.sh`（已提交 ∪ 工作区改动 − 需求涉及文件，支持目录前缀，`core.quotepath=false`）结果作为 ⑥ 入参 | `tools/out-of-scope.sh`、⑥ 的 `outOfScopeFiles` |
+| 22 | MEMORY 里被手工加的 `report_dir / scope / source / frontend_repo / backend_repo` 转正；工作区三目录如何定位 | `tools/workspace-detect.js` 读 `.code-workspace` 探测两仓（lane / 分支 / base 取自部署流水线触发分支 / 画像 / dev 网关 / 模块与流水线表）与会话区（`新需求/`、范式文件）；MEMORY 模板新增 `repos[] / report_dir / scope / source / contract_version / be_modules / env / deploy`，阶段表拆 fe / be 两行，新增「决策卡裁定」「契约校验摘要」 | `tools/workspace-detect.js`、`MEMORY.md`、SKILL.md「⓪ 工作区确认」 |
+| 23 | ① 返回 16 条一句话待决问题，违反范式 DC-1 | ① 人设接入《需求处理范式》阶段一（台账 / 冲突 / 术语 / 矩阵 / 缺口 / 边界六扫 / 反向清单 / 消费方排查 / 决策卡），范式全文作 `paradigm` 入参传入、不复制进 Skill；schema 新增 `reqLedger / glossary / scenarioMatrix / coverageGaps / consumerImpact / decisionCards / stackScope / apiNeeds / route`；`pendingQuestions` 降为决策卡标题别名 | `src/roles/requirement-analyst.md`、`src/workflows/triage.js`、`templates/需求梳理报告模板.md` |
+| 24 | 用户裁定：代码提交由用户决策，流程不自己做 | ⑧ 改为「变更说明 + 提交清单」（每仓待 add 文件 / 越界文件建议回退 / 建议 message / 合入命令），删除所有 `git add` / `commit` 动作；fe-dev / be-dev / verification-runner 人设加「不执行任何 git 写操作」；部署闸门只产出命令 | SKILL.md、`templates/变更日志模板.md`、`src/roles/` |
+| 25 | SKILL.md 约 40% 篇幅是运行时 bug 绕行记录 | 下沉到 `references/运行时排错.md`；SKILL.md 只放流程协议 | `references/运行时排错.md`、SKILL.md |
+| 26 | `rd-dev.md` 写死 MyBatis/JPA，与实际 MyBatis-Flex 不符 | `be-dev` 人设改为「以仓库 CLAUDE.md 为准，不假设固定框架」 | `src/roles/be-dev.md` |
+| 27 | 脚本 `meta.name` 从 `fe-*` 改为 `dev-*`（lane 参数后前缀不再准确） | INSTALL / UNINSTALL 同时匹配新旧名字，升级时清旧脚本；子 agent 安装步骤 D（覆盖前 diff 给用户看） | INSTALL.md、UNINSTALL.md |
+
+## 待观察 / 下一轮（2026-10-16）
+
+- **未在真实 Claude Code Workflow 运行时端到端跑过 fullstack**。本轮验证：`build --check` 绿、`tests/run.js` 73/73、三个 tools 对真实工作区（商业化团队空间全栈）试跑通过。建议用「运营积分看板」的后续迭代做第一次真跑
+- `tools/contract-conformance.js` 只做了 dry-run 与结构测试，未对真实 dev 网关跑过；鉴权头的具体形态（Bearer / Cookie / 自定义 Header）要等第一次联调确认
+- 后端 dev 域名规则 `aicreator-dev-{module}.youmanvideo.com` 是推断，be-profile 初始化时需探测确认
+- `route=light` 的裁剪路径（跳过 ②③、⑥ 单评审员、⑦ 只跑门禁）在 SKILL.md 定义了，脚本层没有专门分支——light 时编排方少调几个脚本即可，但 ⑥ 单评审员目前没有现成脚本形态（可用 `code-audit` 子 agent 顶替）
+- Skill 是否改名 `just-dev`、前端仓 `.claude/agents/` 的 5 份手写人设是否删除：待用户定
+- `.workflow/*.yml` 中 harbor 密码明文入库：与本 Skill 无关，建议尽快处理
+
 ## 2026-09-21 已处理（第一轮实战反馈）
 
 | # | 问题 | 处理 | 落点 |
@@ -29,4 +62,3 @@
 
 
 
-1.开发子agent，一定会遇到问题，问题汇报给主agent，由用户来决策 

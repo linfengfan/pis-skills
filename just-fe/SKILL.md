@@ -1,288 +1,193 @@
 ---
 name: just-fe
-description: 当用户要开发前端功能、做前端需求分析或方案评审、要求走前端研发流程，或提到 "just-fe / 前端工作流 / 研发流程 / fe-triage / 代码评审打分" 时使用。也用于用户要求从某个阶段（UI开发、接口联调、代码Review、测试评估）续接或恢复中断的前端流程。项目无关。
+description: 当用户要开发前端、后端或全栈功能，做需求分析、接口契约、方案评审，要求走研发流程，或提到 "just-fe / 研发流程 / 契约 / 代码评审打分" 时使用。也用于从某个阶段续接或恢复中断的流程。适用于一个前端仓 + 一个后端仓 + 一个会话区的工作区；纯前端需求自动退化为单泳道。改一行文案、修一个单文件明显 bug 不用本 Skill，直接改。
 ---
 
-# 前端研发工作流
+# 全栈研发工作流（just-fe）
 
-需求梳理 → 方案架构 → 方案评审 → 页面UI开发 → 接口联调 → 代码架构Review → 测试评估 → 变更说明与提交
+⓪ 工作区确认 → ① 需求梳理 → ② 契约 → ② 方案（fe / be）→ ③ 方案评审（fe / be）→ ④ 开发（fe UI / be 接口）→ 🚀 部署闸门 → ⑤ 契约校验 + 联调 → ⑥ 代码 Review（每仓）→ ⑦ 测试评估（每仓）→ ⑧ 变更说明 + 提交清单
 
-**你（读到这里的模型）是编排者。** 7 个阶段各自是一个 Dynamic Workflow 脚本，阶段之间的串联、打回、轮次计数、向用户确认，全部由你在阶段之间完成。Workflow 运行期间不能向用户提问（运行时限制），所以**所有需要用户拍板的事，都发生在你调用下一个 Workflow 之前**。
+**你（读到这里的模型）是编排者。** 每个阶段是一张可执行的阶段卡（`stages/*.md`）：读它、按它拼 prompt、派子 agent、按它的公式汇总、按它的模板落盘。阶段之间的串联、打回、轮次、两条泳道的对齐、向用户确认，全部由你在阶段之间完成。**阶段卡是唯一真源，不要凭记忆执行**。
+
+**流程不执行任何 git 写操作**。`add` / `commit` / `merge` / `push` 全部由用户做；你只产出清单和命令。
 
 ## 核心流程
 
 ```
-[入口] 需求输入 / 续接指令 / 用户点名某阶段
+⓪ 工作区确认（tools/workspace-detect.js → report_dir / repos[] / scope / source / dev 网关）─▶ ⛩
    │
+① 需求梳理 ─▶ ⛩（决策卡逐张拍板）
+   │  stackScope: fe | be | fullstack · route: light | full | blocked · 接口三态 existing / new / change
+   │  有 new / change 且后端仓 readonly → 停下问用户
    ▼
-① 需求梳理 ──▶ ⛩ 闸门 ──▶ ② 方案架构 ──▶ ⛩ 闸门 ──▶ ③ 方案评审
-                                                        │ <80 → 打回②，最多3轮
-                                                        │ ≥80
-                                                        ▼
-                                                     ⛩ 闸门
-                                                        │
-                                          🎨 设计稿闸门（缺设计稿先问用户）
-                                                        │
-                                                        ▼
-④ UI开发（Mock数据） ──▶ ⛩ 闸门 ──▶ ⑤ 接口联调（先清单后联调） ──▶ ⛩ 闸门
-                                                                    │
-                                                                    ▼
-⑥ 代码架构Review ── <80 或有🔴致命 → 打回④⑤，最多2轮
-   │ 通过
+② 契约设计 + ③a 契约评审（有接口才跑；<80 打回升版本，最多 2 轮）─▶ ⛩  contract-v{N}
+   ├───────────────┬───────────────┐
+   ②-FE 方案       ②-BE 方案       ← 并行，契约是接口唯一真源
+   ③-FE 评审 6 维   ③-BE 评审 6 维   ← <80 回对应 ②，最多 3 轮
+   └───────────────┴───────────────┘
+   ⛩ 一道闸（两泳道都过）；scope 到此的在此停
+   ├───────────────┬───────────────┐
+   🎨 设计稿闸门     （无）
+   ④-FE UI 开发     ④-BE 接口开发（必须有契约测试，本地 compile / spotless / test 过）
+   └───────────────┴───────────────┘
+   🚀 部署闸门：你产出「合入 dev 并 push」的命令与会触发的流水线，用户执行，回复「已部署」+ gatewayUrl + 鉴权方式
+   │
+⑤ tools/contract-conformance.js 对 dev 网关逐接口校验 → 联调 agent 换真接口
+   │  任一 FAIL → 不进 ⑥，后端修实现或契约升版本
    ▼
-⛩ 闸门 ──▶ ⑦ 测试评估（先跑E2E/回归取证，再打分） ── <80 或验收/回归失败 → 打回②④⑤，最多2轮
-              │ 通过
-              ▼
-           ⛩ 闸门 ──▶ ⑧ 变更说明 → 只 add 本次需求涉及文件 → commit
+⑥ 代码 Review：tools/out-of-scope.sh 算越界 → 每仓 7 维并行；两仓都 ≥80 且无 🔴
+   ▼
+⑦ 测试评估：每仓先取证再打分；fe E2E 打 dev 网关，be 单测 + 契约测试；验收 / 回归 / 契约测试失败一票否决
+   ▼
+⑧ change-{日期}.md：每仓「建议 add 的文件 + 越界文件 + 建议 message + 合入命令」。流程结束，提交由用户决定
 ```
 
-`⛩ 闸门` = 阶段闸门，见下一节。默认每个阶段结束都停下来问用户；用户显式给了 `--auto` 才连续跑。
+`⛩` = 阶段闸门。默认每个阶段结束都停下来问用户；`--auto` 才连续跑，但阻断 / 打回 / 达轮次上限 / 设计稿 / 部署 / 后端权限这几类仍必停。
+
+`stackScope=fe` 且后端仓 `readonly`：契约阶段退化为「勘察 + 复用清单」，BE 泳道、部署闸门、be 的 ⑥⑦ 全部标 `⏭ 不适用`。`route=light`：跳过 ②③ 打分，④ → ⑥（单评审员即可）→ ⑦（只跑门禁）→ ⑧。
+
+## ⓪ 工作区确认（① 之前，只做一次）
+
+1. Bash：`node <本 Skill>/tools/workspace-detect.js <.code-workspace 或父目录> --requirement <需求短名>`
+2. 把 `nextQuestions` 一次性问用户：后端仓本次**可写还是只读参考**、`scope`（本期做到哪）、`source`（需求来源优先级）、脏工作区确认
+3. 以 `MEMORY.md`（本目录）为模板建 `<report_dir>/MEMORY.md`，写入 `report_dir / scope / source / repos[] / env.dev.gatewayUrl / paradigm`。`report_dir` 默认 `<会话区>/新需求/<需求短名>/`
+4. 缺画像的仓库先走 `references/项目画像初始化.md`（fe-profile / be-profile 都要过闸门）
+
+之后所有阶段的仓库路径、分支、base、画像、网关地址都从 MEMORY 读，不再问。
 
 ## 阶段闸门协议（每个阶段结束必做）
 
-一个阶段的 Workflow 返回后，**按顺序做完这四步，才算该阶段结束**：
-
-1. **落盘**：把 `result.report` 写到 `fe-reports/{需求}/<阶段产物>.md`
+1. **落盘**：报告写到 `<report_dir>/<泳道子目录>/<产物>.md`（路径见「产物查找规则」）
 2. **更新 MEMORY.md**：阶段状态、分数、`current_stage` 改为「本阶段已完成，等待用户确认」
-3. **向用户汇报**（不超过 10 行）：产物路径、分数/结论（如有）、待决问题、下一阶段是什么、下一阶段还缺什么输入
-4. **提问并等待**：用 AskUserQuestion（或等价的提问工具）问一个问题，选项固定三个：
-   - `进入下一阶段（⑤接口联调）`——写清下一阶段名字
-   - `本阶段还有调整，继续做`——用户随后给出修改点，你在本阶段内修改、重新落盘、再回到步骤 3
-   - `先停在这里`——更新 MEMORY.md 的中断原因与阶段，结束本轮对话
+3. **汇报**（≤10 行）：产物路径、分数 / 结论、待决问题（① 是决策卡）、下一阶段是什么、还缺什么输入
+4. **提问并等待**：三选一——`进入下一阶段（写清名字）` / `本阶段还有调整` / `先停在这里`
 
-**闸门规则：**
-- 用户没有选「进入下一阶段」之前，**禁止调用下一阶段的 Workflow**。「用户没反对」「上一阶段分很高」「产物看起来完整」都不构成进入下一阶段的理由
-- 只有 `--auto` 模式跳过闸门；即便如此，遇到 阻断（`blocked` / `needs_design` / `awaiting_apis` / `invalid_args`）、评审打回、达到轮次上限，仍必须停下来问用户
-- 用户在闸门处提出的修改，属于「当前阶段」，重跑当前阶段的 Workflow 或直接补做，不要把它算进下一阶段
-- 记录用户在闸门处的决定到 MEMORY.md「阶段闸门记录」
+闸门规则：用户没选「进入下一阶段」前禁止执行下一阶段；闸门处的修改属于当前阶段；记录用户决定到 MEMORY「阶段闸门记录」；① 的决策卡裁定记到「决策卡裁定」，下游只认那里的结论。
 
-## 设计稿闸门（④ UI 开发前必做）
+## 三道特殊闸门
 
-进入 ④ 前，检查 ① 的 triage 结果里 `uiChange` 与 `designAssets`（或 MEMORY.md 的 `design` 字段）：
-
-| 情况 | 你要做的事 |
-|------|-----------|
-| `uiChange=false` | 用 AskUserQuestion 确认「本需求不涉及界面改动，跳过 UI 开发阶段？」；用户同意 → MEMORY 标记 ④ 为 `⏭ 跳过`，直接进 ⑤ 闸门 |
-| `uiChange=true` 且已有设计稿链接 | 把链接作为 `figmaUrl` 传入，MEMORY `design` 记录链接 |
-| `uiChange=true` 且没有设计稿 | **先问用户**：「请提供设计稿链接（Figma / 蓝湖 / MasterGo / 截图均可），或明确回复『没有设计稿，按现有页面风格实现』」。拿到链接 → `figmaUrl`；拿到明确的「无设计稿」回复 → 原话作为 `noDesignReason` 传入。两者都没有 → 不调 ④ |
-
-`fe-ui-implementation` 在既无 `figmaUrl` 也无 `noDesignReason` 时会直接返回 `status='needs_design'` 且不启动任何开发 agent——这是脚本层兜底，不是让你依赖它来「顺便问一下」。**问设计稿这一步必须由你在调用前主动完成。**
-
-开发过程中（④⑤）开发 agent 若在报告 `issues` 里写了「需要设计稿」「视觉细节缺失」，同样回到本闸门问用户，不要让它凭想象补。
+| 闸门 | 何时 | 你要做的事 |
+|------|------|-----------|
+| 🎨 设计稿 | ④-FE 之前 | 读 ① 的 `uiChange` / `designAssets`。`uiChange=false` → 问用户是否跳过 ④-FE；有链接（Figma / 蓝湖 / 在线原型 / 截图）→ 作 `designUrl` 传入，在线原型可先下载源码走查并落 `prototype-interactions-{日期}.md`；没有 → **先问用户**要链接或明确的「无设计稿，按现有风格」原话作 `noDesignReason`。两者都没有不进 ④-FE |
+| 🔐 后端权限 | ① 返回 `needsBackendWrite=true` 而 MEMORY `repos[be].mode=readonly` | 停下问用户：改为可写（本流程实现）还是保持只读（契约只定义、交后端团队，BE 泳道不启动） |
+| 🚀 部署 | ④-BE `completed` 之后、⑤ 之前 | 用 MEMORY 的 `repos[be]`、`be_modules`、流水线表生成 `git checkout <base> && git merge --no-ff <branch> && git push origin <base>` 与「会触发的流水线」清单给用户。**你不执行**。用户回复「已部署」+ `gatewayUrl` + 鉴权方式后写 MEMORY `deploy` / `env.dev`，再跑 ⑤ 的校验脚本 |
 
 ## 用户点名阶段：跳转优先，状态先同步
 
-用户说「开始代码评审」「进入联调」「跑一下测试评估」，等价于 `--from=对应阶段`。**先同步状态，再执行**：
+用户说「开始代码评审」「出契约」「跑测试」等价于 `--from=对应阶段`。先改 MEMORY `current_stage`，中间未完成的阶段问一句标「✅ 用户确认完成」或「⏭ 用户跳过」，按「产物查找规则」补前置产物，再执行目标阶段。**汇报时的阶段名必须来自 MEMORY `current_stage`**。
 
-1. 按下表把用户的话映射到阶段
-2. **立刻更新 MEMORY.md**：`current_stage` 改为目标阶段；之前未标完成的阶段按实际情况标为 `✅ 用户确认完成` 或 `⏭ 用户跳过`（问一句即可，不要替用户决定）
-3. 按「续接协议」检查目标阶段所需的前置产物；缺失就读磁盘/问用户补齐，**不重跑用户已确认完成的阶段**
-4. 调用目标阶段的 Workflow
-
-| 用户的话（举例） | 阶段 |
+| 用户的话 | 阶段卡 |
 |------|------|
-| 梳理需求 / 分析一下需求 / triage | ① |
-| 出方案 / 做架构设计 / 拆任务卡 | ② |
-| 评审方案 / 方案打分 | ③ |
-| 开始开发 / 写页面 / 做 UI / 画界面 | ④ |
-| 接接口 / 联调 / 接口清单 | ⑤ |
-| 代码评审 / Review / 审一下代码 / 代码打分 | ⑥ |
-| 测试评估 / 跑测试 / E2E / 验收 | ⑦ |
-| 写变更说明 / 提交 / commit | ⑧ |
+| 梳理需求 / 分析需求 / triage | `stages/01-triage.md` |
+| 出契约 / 定接口 / 接口清单 | `stages/02-contract.md` |
+| 出方案 / 做架构 / 拆任务卡（说清前端还是后端） | `stages/03-architecture.md` |
+| 评审方案 / 方案打分 | `stages/04-architecture-review.md` |
+| 开始开发 / 写页面 / 画界面 | `stages/05-ui-implementation.md` |
+| 写接口 / 后端开发 / 建表 | `stages/06-be-implementation.md` |
+| 部署好了 / 已合 dev | 🚀 → `stages/07-api-integration.md` |
+| 联调 / 接接口 / 跑契约校验 | `stages/07-api-integration.md` |
+| 代码评审 / Review / 代码打分 | `stages/08-code-review.md` |
+| 测试评估 / 跑测试 / E2E / 验收 | `stages/09-test-assessment.md` |
+| 写变更说明 / 提交清单 | ⑧（无卡，见下） |
 
-**汇报时的阶段名必须来自 MEMORY.md 的 `current_stage`**，不是你记忆里的上一阶段。每次向用户汇报前先读一次 MEMORY.md；发现不一致，先改 MEMORY.md 再开口。
+## 阶段编排表（入参带齐，不空参执行）
 
-## 各阶段的执行方式（不要调用不存在的 Skill）
+各阶段的完整入参、前置判定、子 agent 组成、schema、汇总公式、报告模板在阶段卡里，下表只是索引。所有报告落盘前用 `date -u +%FT%TZ` 填时间字段。
 
-本 Skill **不依赖任何名为「前端开发工程师」「前端架构师」「需求梳理分析师」「代码审核者」「测试评估专家」的外部 Skill 或 Agent**。这些只是各脚本内联 prompt 里的角色名。`Skill(前端开发工程师)` 这类调用是错误的，会得到 `Unknown skill`。
+| 阶段 | 阶段卡 | 关键入参（来源） | 返回值判读 |
+|------|--------|----------------|-----------|
+| ① | `stages/01-triage.md` | `requirement`；`paradigm`、两仓画像、`repos` | `blocked` 停；记 `stackScope / route / apiNeeds / needsBackendWrite / uiChange / designAssets / decisionCards / acceptanceCriteria` |
+| ② 契约 | `stages/02-contract.md` | + `apiNeeds`、`beMode`、`version`、`round`；重评带 `previousContract` + `issues` | `no_api` 直接进方案；`passed=false` 带 `issues` 重跑（≤2）；记 `contract_version / be_modules`；落 `contract-v{N}.md` + `contract-review-v{N}.md` |
+| ② 方案 | `stages/03-architecture.md` | + `lane`、`contract`；打回带 `reviewIssues` | `needs_clarification` 回①；`requirementFiles` 记 MEMORY 对应仓 |
+| ③ 评审 | `stages/04-architecture-review.md` | + `architecture`、`lane`、`round` | `passed=false` 带 `issues` 回 ②-方案（≤3） |
+| ④-FE | `stages/05-ui-implementation.md` | + `designUrl` 或 `noDesignReason`、`contract`、`mockPlan`、`taskCards` | `needs_design` 回设计稿闸门；`completedFiles` 记 MEMORY fe |
+| ④-BE | `stages/06-be-implementation.md` | + `contract`、`contractJson`、`modules` | `needs_contract` 先跑契约；`incomplete` 修后重跑；`completed` → 部署闸门 |
+| ⑤ | `stages/07-api-integration.md` | 先 Bash 跑 `tools/contract-conformance.js`，再 + `conformanceResult` | `contract_mismatch` 不进 ⑥；`canProceed` 才进 ⑥ |
+| ⑥ | `stages/08-code-review.md` | 先 Bash 跑 `tools/out-of-scope.sh`，再 + `lane`、`changeScope`、`round` | `passed=false` 带 critical + minor 回对应 ④（≤2）；两仓都过才进 ⑦ |
+| ⑦ | `stages/09-test-assessment.md` | + `lane`、`acceptanceCriteria`、`changeScope`；fe 加 `gatewayUrl`，be 加 `contractJson` | `veto=true` 先修失败项；`passed=false` 回对应 ④ 或 ②（≤2） |
+| ⑧ | 无卡 | 照 `templates/变更日志模板.md` 写 `change-{日期}.md` | **不执行 git 写操作** |
 
-先判定运行模式，再按表执行：
+## 续接与断点恢复
 
-| 模式 | 判定 | 每个阶段怎么跑 |
-|------|------|--------------|
-| **B · Workflow 工具在** | 当前会话的工具列表里有 `Workflow`（别名 `RunWorkflow`）。**只看工具在不在，不要用「`/` 补全里有没有 `fe-triage`」或「按 name 调一下试试」来判定** | 用 `Workflow` 工具 + `scriptPath` 直接跑本 Skill 目录里的脚本，**带齐入参** |
-| **A · 没有 Workflow 工具**（Cursor、旧版 Claude Code、Pro 未开 Dynamic workflows） | 工具列表里没有 `Workflow` | **REQUIRED：先读 `references/模式A执行手册.md`**，按其中该阶段的「阶段卡」执行：`Read` 脚本取 prompt/schema 常量 → 按卡片拼 prompt、派 `Agent` 子 agent（③⑥ 多维度同一批并行）→ 按卡片公式汇总 → 照脚本 `report` 模板写报告。脚本仍是唯一真源，手册只管「去哪取、怎么拼、怎么算」 |
-
-两种模式下产物路径、闸门、评分铁律完全一致。模式 A 下 `parallel()` 的隔离性靠你手工保证：不要把一个维度的结论喂给另一个维度的评审员。
-
-### 工具怎么调（参数名以工具自己的 schema 为准）
-
-**调用任何工具之前先看它的参数描述**，下面是两种模式各自的正确形态，以及最常见的参数错误。
-
-模式 B，`Workflow` 工具三选一提供 `scriptPath` / `name` / `script`，外加 `args`。**首选 `scriptPath`**——它直接读磁盘上的脚本，不经过「已注册 workflow」名册，不需要把脚本复制到 `.claude/workflows/`，也不需要新开会话：
-
-```json
-{ "scriptPath": "<本 Skill 目录>/scripts/triage-workflow.js", "args": { "requirement": "<需求原文>", "projectContext": "<fe-profile 全文>", "timestamp": "2026-09-22T02:00:00Z" } }
-```
-
-`<本 Skill 目录>` 是这份 SKILL.md 所在的绝对路径；不确定就找：
-
-```bash
-find ~/.claude/skills ./.claude/skills ~/.cursor/skills -path '*/just-fe/scripts/triage-workflow.js' 2>/dev/null
-```
-
-`name` 方式（`{ "name": "fe-triage", "args": {...} }`）只在脚本已复制到 `~/.claude/workflows/` 或 `<项目>/.claude/workflows/` **且是在那之后新开的会话**里才可用——注册表在会话启动时构建，会话中途复制进去的脚本要到下一个会话才能按名找到。所以 not found 不代表模式 B 不可用，改 `scriptPath` 即可。
-
-- `args` 必须是**对象**，不要 `JSON.stringify` 成字符串
-- **每次调用都带 `timestamp`**（先用 Bash 跑 `date -u +%FT%TZ` 取值，放进 `args`）。Workflow 脚本里禁止 `Date` / `Math.random`（运行时为了可 resume 强制确定性，调用即整段失败），所以报告里的时间只能由你传进去；不传则报告时间字段留占位文字
-- `scriptPath` 方式若脚本返回 `invalid_args`（你明明传了 `args`），是旧版运行时的已知 bug（`scriptPath` 丢 `args`）：改用 `script`——用 Read 读脚本全文，作为 `script` 参数原样传入，`args` 照传
-- `scriptPath` / `script` 方式每次都会弹一次「Review workflow before running」审批（只有 `name` 方式能被永久放行）；一个阶段一次，和闸门节奏一致，正常
-- **Workflow 在后台异步运行**：工具立刻返回 `status: 'async_launched'` 和 `taskId`，结果在跑完后自动回到会话。此时你该做的是**等**——不要空参调 `TaskOutput`（会报 `Task ID is required`），也不要反复轮询（每次轮询都占主上下文）。确需看进度：`TaskOutput` 带上返回的 `taskId`，或让用户打开 `/workflows` 看
-
-模式 A，`Agent` 工具的必填参数是 `description`、`prompt`、`subagent_type`，**没有** `label` / `schema` / `phase`——那三个是 Workflow 脚本内 `agent()` 的选项，照搬过来就是 `Invalid tool parameters`。对应关系：
-
-| 脚本里 `agent(prompt, opts)` | `Agent` 工具参数 |
-|-----|-----|
-| `opts.label` | `description`（3～5 个词，如 `triage requirement`） |
-| `prompt` | `prompt`（把脚本里拼好的完整 prompt 原文放进去） |
-| `opts.schema` | 追加到 `prompt` 末尾：「回复末尾输出一个 ```json 代码块，严格符合以下 JSON Schema：`<schema 原文>`」；返回后你自己解析这个代码块 |
-| — | `subagent_type`：填当前环境工具描述里列出的通用类型（Claude Code 是 `general-purpose`），不要凭记忆编 |
-
-```json
-{ "description": "triage requirement", "subagent_type": "general-purpose", "prompt": "<REQUIREMENT_ANALYSIS_SYSTEM 原文>\n\n---\n\n## 待分析需求\n<需求原文>\n\n回复末尾输出一个 ```json 代码块，严格符合以下 JSON Schema：<REQUIREMENT_SCHEMA 原文>" }
-```
-
-### 工具报错怎么处理
-
-| 报错 | 含义 | 处理 |
-|------|------|------|
-| `Invalid tool parameters` | **参数名或类型错**，不是工具不可用 | 重新读该工具的参数描述，按上面的形态改一次再调。仍报错 → 把工具名、你传的参数、错误原文一起停下告诉用户 |
-| `No workflow named 'fe-…'` / not found | 按 `name` 找不到：脚本没复制到 `.claude/workflows/`，或复制后没新开会话 | **不是模式 B 不可用。** 改 `scriptPath` 指向本 Skill 目录里的脚本，继续走模式 B |
-| `Script must begin with export const meta` | 脚本第一条语句不是 `export const meta`（当前版本已修正；出现说明装的是旧脚本） | 按 INSTALL.md Step 4 升级 |
-| `Unknown skill` | 调了不存在的 Skill | 见上一节，改用 Workflow 或 `Agent` |
-| `Task ID is required` | 空参调了 `TaskOutput` | 用 Workflow 返回的 `taskId`，或干脆等完成通知 |
-| `Date.now() / new Date() are unavailable in workflow scripts` | 脚本里用了 `Date`（当前版本已移除；出现说明装的是旧脚本） | 按 INSTALL.md Step 4 升级脚本；这一轮的评审结果已丢，需重跑该阶段 |
-| 子 agent 返回空 / 被截断 | 运行时错误 | 原样重试一次；仍失败停下报告 |
-
-**禁止的降级**：两种工具都调不通时，不要「改用直接执行模式，自己在主上下文里完成分析」。那会把阶段产物和中间过程全灌进主上下文，③⑥⑦ 的评审也失去独立性。正确动作是停下来，把报错原文交给用户，让用户决定修环境还是换模式。
-
-## 阶段编排表（入参必须带齐）
-
-**没有总编排脚本。** 每次调用前从磁盘读上游产物作为入参；**不要空参调用**——脚本对空参只会返回 `status='invalid_args'`（或从 diff 推断并降低置信度），不会替你去读文件。下表之外，**所有阶段都接受 `timestamp`**（ISO 字符串），每次调用都带上。
-
-| 阶段 | Workflow 名称 | 必带入参（来源） | 可选入参 | 返回值判读 |
-|------|---------------|----------------|----------|-----------|
-| ①需求梳理 | `fe-triage` | `requirement`（需求原文） | `projectContext`（fe-profile 全文） | `status==='blocked'` 停下问用户；记录 `uiChange` / `designAssets` / `needsDesignInput` 到 MEMORY |
-| ②方案架构 | `fe-architecture` | `requirement`、`requirementAnalysis`（① 的 `analysis`） | `projectContext` | `status==='needs_clarification'` 回①补齐 |
-| ③方案评审 | `fe-architecture-review` | `architecture`（architecture-{日期}.md 全文）、`round` | `profile` | `passed===false` 带 `issues` 回②，`round+1`，最多 3 轮 |
-| ④UI开发 | `fe-ui-implementation` | `requirement`、`figmaUrl` **或** `noDesignReason`（设计稿闸门产出） | `taskCards`（② 的任务卡） | `status==='needs_design'` 回设计稿闸门；`blockReason` 非空停下 |
-| ⑤接口联调 | `fe-api-integration` | `requirement`、`architecture`、`uiCompleted`（④ 报告全文或改动文件清单） | — | `status==='awaiting_apis'` 停下等接口就绪，问用户 |
-| ⑥代码Review | `fe-code-arch-review` | `requirement`、`changeScope`（如 `git diff main...HEAD`）、`round` | `projectContext`、`requirementFiles`（②文件清单 + ④⑤ `completedFiles`，用于判越界改动） | `passed===false` 带 `criticalIssues`+`minorIssues` 回④⑤，`round+1`，最多 2 轮 |
-| ⑦测试评估 | `fe-test-assessment` | `requirement`、`acceptanceCriteria`（① 的验收标准）、`changeScope`、`round` | `projectContext`（含 e2e/test 门禁命令）、`e2eCommand`、`devServerCommand`、`baseUrl`、`skipE2E` | `passed===false` 回②④⑤，`round+1`，最多 2 轮；`e2eVeto===true` 时先修失败项 |
-
-单阶段调用形态（`Workflow` 工具，`scriptPath` 指向本 Skill 目录，`args` 是对象）：
-
-```json
-{
-  "scriptPath": "<本 Skill 目录>/scripts/code-arch-review-workflow.js",
-  "args": {
-    "requirement": "<triage 报告「一句话目标」+ 验收标准>",
-    "changeScope": "git diff main...HEAD",
-    "projectContext": "<.claude/fe-profile.md 全文>",
-    "requirementFiles": ["src/views/Detail.vue", "src/api/favorite.ts"],
-    "round": 1,
-    "timestamp": "2026-09-21T12:00:00Z"
-  }
-}
-```
-
-返回值里读 `passed` / `finalScore` / `criticalIssues` / `report`。
-
-### 完整流程的编排步骤
-
-1. 读 `.claude/fe-profile.md`；不存在则先按 `references/项目画像初始化.md` 生成（这一步也要过闸门，用户确认后写盘）
-2. 在 `fe-reports/{需求}/` 下用 `MEMORY.md` 建流程状态（模板即本目录的 `MEMORY.md`），`gate_mode` 记 `gated`（默认）或 `auto`
-3. 依次执行 ①~⑦，**每个阶段结束走完「阶段闸门协议」四步**
-4. ④ 之前过「设计稿闸门」
-5. 遇到 `passed===false`：把 `issues` / `criticalIssues` 原文带回打回目标阶段，轮次 +1；达轮次上限停下交人工
-6. ⑦ 通过并过闸门后，按 `templates/变更日志模板.md` 写 `change-{日期}.md`；`git add` **只加本次需求涉及的文件**（对照 ④⑤ 的 `completedFiles`），再 commit
-
-### 续接与断点恢复
-
-同样没有 resume 脚本，手工续接：
-
-1. 读 `fe-reports/{需求}/MEMORY.md` 定位 `current_stage`、已完成轮次、闸门记录
-2. 按「产物查找规则」逐个确认前置产物存在且完整
-3. 把已有产物读成字符串，作为目标阶段 Workflow 的入参
-4. 从目标阶段继续；不重跑已通过的阶段，不重问已澄清的维度
+1. 读 `<report_dir>/MEMORY.md` 定位 `current_stage`、泳道状态、轮次、闸门记录、决策卡裁定
+2. 按「产物查找规则」确认前置产物存在且完整（段落齐全）
+3. 把已有产物读成字符串作为目标阶段入参；从目标阶段继续，不重跑已通过的阶段，不重问已裁定的决策卡
 
 ```
-/just-fe --from=⑥                    # 读①~⑤产物 → 直接调 fe-code-arch-review
-/just-fe --from=⑤ --需求="商品详情页"   # 读①~④产物 → 直接调 fe-api-integration
-/just-fe --resume                    # 读 MEMORY.md 定位断点后按上述步骤续接
-/just-fe --auto <需求>                # 不设闸门连续跑；阻断/打回/达上限仍会停
+/just-fe --from=⑥ --lane=be        # 读契约、be 方案、be 开发报告 → 跑 out-of-scope → 08 卡
+/just-fe --from=⑤                  # 读契约 → 跑 conformance → 07 卡
+/just-fe --resume                  # 读 MEMORY 定位断点
+/just-fe --auto <需求>              # 不设普通闸门；特殊闸门仍停
 ```
 
-### 产物查找规则
+## 产物查找规则（相对 report_dir）
 
-| 阶段 | 产物路径 |
-|------|----------|
-| ①需求梳理 | `fe-reports/{需求}/triage-{日期}.md` |
-| ②方案架构 | `fe-reports/{需求}/architecture-{日期}.md` |
-| ③方案评审 | `fe-reports/{需求}/arch-review-{日期}.md` |
-| ④UI开发 | `fe-reports/{需求}/ui-{日期}.md` |
-| ⑤接口联调 | `fe-reports/{需求}/api-list-{日期}.md`、`integration-{日期}.md` |
-| ⑥代码Review | `fe-reports/{需求}/code-arch-review-{日期}.md` |
-| ⑦测试评估 | `fe-reports/{需求}/test-assessment-{日期}.md` |
-| ⑧完成 | `fe-reports/{需求}/change-{日期}.md` |
+| 阶段 | 产物 |
+|------|------|
+| ⓪ | `MEMORY.md` |
+| ① | `triage-{日期}.md`；原型走查 `prototype-interactions-{日期}.md` |
+| ② 契约 | `contract-v{N}.md`、`contract-review-v{N}.md` |
+| ②③ 方案 | `fe/architecture-{日期}.md`、`fe/arch-review-{日期}.md`；`be/…` 同 |
+| ④ | `fe/ui-{日期}.md`；`be/impl-{日期}.md` |
+| ⑤ | `conformance-{日期}.json`、`integration-{日期}.md` |
+| ⑥ | `fe/code-review-{日期}.md`；`be/code-review-{日期}.md` |
+| ⑦ | `fe/test-assessment-{日期}.md`；`be/test-assessment-{日期}.md` |
+| ⑧ | `change-{日期}.md` |
 
-产物存在且完整 → 直接进入该阶段；存在但不完整 → 从该阶段重新开始；不存在 → 回溯到前置阶段。
+存在且完整 → 直接进入该阶段；存在但不完整 → 从该阶段重新开始；不存在 → 回溯前置阶段。
 
 ## 评分铁律
 
-- 方案评审 < 80 分 → 打回重写（最多 3 轮）
-- 代码架构Review < 80 分 → 打回开发（最多 2 轮）
-- 代码架构Review 出现任一 🔴 致命问题 → **一票否决，与总分无关**
-- 测试评估 < 80 分 → 打回架构和开发（最多 2 轮）
-- 测试评估中任一验收标准 E2E 失败、或既有测试回归失败 → **一票否决，与总分无关**
-- 未能自动验证（`unverified`）的验收标准不算覆盖，必须列进「人工验证清单」，合并前逐条确认
-
-打分口径统一见 `templates/评分协议.md`。反向铁律同样成立：**找不到真实问题时必须如实给高分**，禁止为了显得严格而编造扣分项。
+- 契约评审 / 方案评审 / 代码 Review / 测试评估 均 **80 分红线**，不到线必须打回，轮次见 `references/评分口径.md`
+- 代码 Review 任一 🔴 critical → 一票否决；fullstack 两仓都要过
+- 测试评估任一验收标准取证失败 / 既有测试回归失败 / 契约测试失败 → 一票否决
+- 联调前契约校验任一 FAIL → 不进 ⑥
+- `unverified` 不算覆盖，进「人工 / 联调环境验证清单」，提交前逐条确认
+- 反向铁律：找不到真实问题必须如实给高分，禁止编造扣分项
 
 ## 编排纪律
 
-1. **入口不干活** —— 只路由和协调，实现/评审在各 Workflow（或模式 A 的子 agent）执行
-2. **闸门必停** —— 每个阶段结束向用户汇报并提问，用户点头才进下一阶段；`--auto` 是唯一例外
-3. **产物落盘先行** —— 先落盘、再更新 MEMORY、再汇报
-4. **状态以 MEMORY 为准** —— 汇报的阶段名取自 `current_stage`；用户点名阶段先改 MEMORY 再执行
-5. **设计稿先问** —— 涉及界面改动、没有设计稿链接，不进 ④
-6. **入参带齐** —— 不空参调用 Workflow；上游产物从磁盘读成字符串传入
-7. **变更边界** —— 开发 agent 只改需求涉及文件；提交时只 add 这些文件；Review 把越界格式化/重构当问题记
-8. **不重复澄清** —— 已澄清维度引用记录，不重问
-9. **清单先行** —— 接口联调必须先产出清单，有了清单再开发
-10. **评分铁律** —— 不到线必须打回，不允许妥协；致命/验收失败一票否决
+1. **入口不干活**——只路由、协调、汇总；分析 / 设计 / 开发 / 评审在子 agent 里
+2. **闸门必停**——`--auto` 只跳过「一切正常时的点头」，特殊闸门与打回仍停
+3. **产物落盘先行**——先落盘、再更新 MEMORY、再汇报
+4. **状态以 MEMORY 为准**——仓库路径 / 分支 / 画像 / 网关 / 契约版本 / 决策卡裁定全部从 MEMORY 读
+5. **契约先行**——有接口的需求先过契约评审再出方案；契约改动升版本重评，两泳道的 ④ 都要收到变更通知
+6. **确定性检查用脚本**——越界改动、契约符合性、工作区探测都跑 `tools/`，不让 agent 猜
+7. **变更边界**——开发 agent 只改需求涉及文件；越界文件在 ⑧ 单列为「建议先回退」
+8. **提交权归用户**——任何阶段不 `git add / commit / merge / push`；部署闸门只产出命令
+9. **设计稿先问**——涉及界面改动、没有设计稿链接，不进 ④-FE
+10. **不重复澄清**——已裁定的决策卡引用 MEMORY，不重问
 
 ## 红旗清单：出现这些念头立刻停下
 
 | 念头 | 真相 |
 |------|------|
-| 「调用 `Skill(前端开发工程师)` 让它写代码」 | 不存在这个 Skill。用 Workflow `fe-ui-implementation`，或模式 A 下带 `FRONTEND_DEV_SYSTEM` 派子 agent |
+| 「凭记忆按 7 个维度评审一下」 | 维度真源在阶段卡。先 `Read` 对应阶段卡，照它的维度与公式来 |
 | 「上一阶段分很高，直接进下一阶段」 | 闸门没过。先汇报、再提问、等用户选 |
-| 「用户说开始评审了，我先把 UI 阶段收个尾」 | 用户点名了阶段。先改 MEMORY `current_stage`，再问 ④⑤ 算完成还是跳过 |
-| 「没设计稿就按现有风格来吧」 | 这是用户的决定。先问，拿到链接或明确的「无设计稿」原话再进 ④ |
-| 「直接 `/fe-code-arch-review` 跑一下」 | 空参会失败或降置信度。从磁盘读 requirement / changeScope / round 再调 |
-| 「`Agent` 工具报 `Invalid tool parameters`，Workflow 也不行，我自己在主上下文里做吧」 | 参数错 ≠ 工具不可用。按「工具怎么调」改参数重试一次；仍失败就停下把报错交给用户。禁止退化成主上下文直接干 |
-| 「把 `label` / `schema` 传给 `Agent` 工具」 | 那是脚本内 `agent()` 的选项。`Agent` 工具只认 `description` / `prompt` / `subagent_type`，schema 要写进 prompt |
-| 「Workflow 启动了，我调 `TaskOutput` 看看跑到哪了」 | 后台跑完会自动回来。空参 `TaskOutput` 报错，反复轮询浪费上下文。等 |
-| 「`Workflow` 按 name 找不到 fe-triage，所以 Workflow 模式不可用，切模式 A」 | 名册在会话启动时构建，找不到是注册问题不是工具问题。只要工具列表里有 `Workflow`，用 `scriptPath` 直接跑脚本 |
-| 「顺手把这个文件格式化一下」 | 越界改动。开发 agent 只改需求涉及文件，Review 会把它记成问题 |
-| 「测试评估看代码就能打分」 | 先跑 E2E/回归取证。没有工具证据的验收标准只能算 unverified |
-| 「汇报时说『当前在 UI 开发阶段』」 | 先读 MEMORY.md 的 `current_stage`，不凭记忆 |
+| 「后端仓是只读的，我先把接口定义放到前端方案里」 | 接口不属于方案，属于契约。先过 🔐 后端权限闸门，契约照出，只是不实现 |
+| 「契约差一个字段，我在前端做个兼容」 | 契约是真源。FAIL 的接口保留 Mock，后端修或契约升版本，不做前端补丁 |
+| 「后端起不来，我本地装个 MySQL 跑一下」 | 不可本地运行就标 `unverified`，等 dev 环境 |
+| 「代码写完了，顺手 commit 一下」 | 提交权归用户。只写 `change-{日期}.md` 的清单 |
+| 「合入 dev 触发部署，我来 push」 | 部署闸门只产出命令。用户执行 |
+| 「越界改动我看一眼 diff 就知道」 | 跑 `tools/out-of-scope.sh`，结果喂给 ⑥ |
+| 「没设计稿就按现有风格来吧」 | 用户的决定。先问，拿到链接或「无设计稿」原话再进 ④-FE |
+| 「决策卡太多，我挑几个重要的问」 | 全部汇报，用户决定哪些现在拍、哪些按建议默认走；裁定写 MEMORY |
+| 「子 agent 连番报错，我自己在主上下文做吧」 | 参数错 ≠ 工具不可用。查 `references/运行时排错.md` 改一次；仍失败停下交用户 |
+| 「汇报时说『当前在 UI 开发阶段』」 | 先读 MEMORY `current_stage`，不凭记忆 |
 
 ## 配套资源
 
-阶段执行时按需读取，不要凭记忆编造格式：
-
 | 资源 | 何时读 |
 |------|--------|
-| `MEMORY.md`（本目录） | 建流程状态时复制为 `fe-reports/{需求}/MEMORY.md` |
-| `templates/项目画像模板.md` | 生成 `.claude/fe-profile.md` 时 |
-| `templates/需求梳理报告模板.md` | ①落盘 `triage-{日期}.md` 时 |
-| `templates/架构方案模板.md` | ②落盘 `architecture-{日期}.md` 时 |
-| `templates/评分协议.md` | ③⑥⑦打分前，统一扣分口径 |
-| `templates/变更日志模板.md` | ⑧落盘 `change-{日期}.md` 时 |
-| `references/项目画像初始化.md` | 项目画像缺失，需要探测技术栈与门禁命令时 |
-| `references/需求分诊.md` | ①需要六维度澄清清单与六关筛选口径时 |
-| `references/前端功能团队.md` | 中大型改动想用四角色并行分析加强②时（可选增强） |
-| `references/模式A执行手册.md` | **没有 `Workflow` 工具时必读**：每阶段取哪些常量、prompt 怎么拼、子 agent 派几个、分数怎么算 |
-| `scripts/*-workflow.js` | 模式 B 下作为 `scriptPath` 直接跑；模式 A 下按手册 `Read` 取 prompt / schema / 报告模板 |
+| `MEMORY.md`（本目录） | ⓪ 建 `<report_dir>/MEMORY.md` 时 |
+| `stages/01~09-*.md` | 每个阶段执行前**必读**，按卡执行 |
+| `roles/fe-dev.md` | ④-FE 与 ⑤ 拼 prompt 时（两卡共用的人设，不复制副本） |
+| `tools/workspace-detect.js` | ⓪ |
+| `tools/contract-conformance.js` | ⑤ 之前 |
+| `tools/out-of-scope.sh` | ⑥ 之前，每仓一次 |
+| `templates/项目画像模板.md` / `templates/后端画像模板.md` | 生成 fe-profile / be-profile 时 |
+| `templates/变更日志模板.md` | ⑧ 写 `change-{日期}.md` |
+| `references/评分口径.md` | ③⑥⑦ 打分前统一口径 |
+| `references/项目画像初始化.md` | 画像缺失 |
+| `references/需求分诊.md` | ① 的 route / stackScope 判定与范式接入 |
+| `references/运行时排错.md` | 子 agent 参数形态、schema 尾注、并行规则、报错对照 |
