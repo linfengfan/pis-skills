@@ -1,5 +1,23 @@
 # just-fe 使用反馈与处理记录
 
+## 2026-10-18 已处理（优化：去冗余与修 bug，不改文件结构、工具参数只增不改）
+
+| # | 问题 | 处理 | 落点 |
+|---|------|------|------|
+| 29 | 联调脚本对 POST / PUT / PATCH / DELETE 用示例值真实发请求，会污染或删除 dev 数据 | 写接口默认不发送、标 UNVERIFIED；新增 `--allow-write <id,…>`，用户同意后放行 | `tools/contract-conformance.js`、`stages/07-api-integration.md` |
+| 30 | 联调脚本把返回 HTML 登录页的 401 判 FAIL（挡住 ⑥）；空数组直接 PASS | 先判 401 / 403 再解析；2xx HTML 判 UNVERIFIED；新增 PARTIAL（有字段无法核对），summary 增加 `partial` | 同上 |
+| 31 | 部署闸门合入的分支没有提交（开发 agent 不提交），推上去的 dev 不含本次代码；也没提 DDL 与网关路由 | 闸门先给待提交清单与建议 message，用户在特性分支提交，再给合入命令；补「先执行 DDL、先配网关路由」 | `SKILL.md`、`README.md`、`templates/变更日志模板.md` |
+| 32 | `workspace-detect.js` 遇带注释 / 尾逗号的工作区文件、gradle-only 后端仓崩溃；带 package.json 的 Java 仓误判为 fe | JSONC 解析；pom.xml 存在才读；有构建文件且无前端框架依赖判 be | `tools/workspace-detect.js` |
+| 33 | `out-of-scope.sh` 本地无 base 分支时静默漏报已提交的越界文件；用户开工前的脏文件被误判越界 | 本地无 `<base>` 时用 `origin/<base>`，输出 `baseRef`；新增可选第 4 参数（④ 开工前 `git status --porcelain` 记录），其中文件归入 `preexisting` | `tools/out-of-scope.sh`、`stages/05`、`stages/06`、`stages/08` |
+| 34 | 凭证通过 `--header` 进命令行与对话记录 | 新增 `--header-file`（每行一个 Header，权限 600），阶段卡与 README 改用本地凭证文件 | `tools/contract-conformance.js`、`stages/07`、`README.md` |
+| 35 | 与 just-flf 触发条件重叠 | description 写明适用的团队工作区，并注明与 just-flf 二选一安装 | `SKILL.md`、`README.md` |
+| 36 | ③「未返回不计分母」可只回一个维度就通过、全失败时除零；⑥「未返回记 0」一个超时就必挂 | 统一为：所有维度必须返回，缺失重派一次，仍缺 → 无法完成，停下交用户 | `stages/02`、`stages/04`、`stages/08`、`references/评分口径.md`、`references/运行时排错.md` |
+| 37 | 打回回路缺口：⑦ 打回修复后是否重跑 ⑥、部署后再改代码、契约升版后如何处理 | SKILL.md 新增「打回回路」 | `SKILL.md` |
+| 38 | `route=light` 的单评审员、⑦ 只跑门禁，以及纯后端需求的 ⑤，都没有落地说明 | SKILL.md 新增「lite 档与纯后端需求」 | `SKILL.md` |
+| 39 | README 称联调脚本校验错误码，实际不校验 | 改为「字段、类型、可空、统一响应体 code；错误码分支由后端契约测试覆盖」 | `README.md`、`stages/07` |
+| 40 | 同一天多轮产物用 `{日期}` 命名会互相覆盖 | 方案 / 评审 / 开发 / 联调 / Review / 测试产物加 `-r{轮次}`；旧名视为 r1 照常识别 | `SKILL.md` 产物查找规则、`MEMORY.md`、`stages/03`–`09` |
+| 41 | 冗余与矛盾：契约打回是否升版本前后不一；评分口径「维度速览」重复阶段卡；运行时排错「模式 A」过期章节；需求分诊指向已删除文件；README 过程性叙述与过期验证说明；报告模板嵌套代码块错位 | 统一为「修订即升版本」；删除重复与过期内容；修正引用；模板外层改用 `~~~` | `stages/02`、`references/*`、`README.md`、`MEMORY.md` |
+
 ## 2026-10-16 已处理（全栈改造，按 docs/全栈流程设计-20261016.md）
 
 | # | 问题 / 需求 | 处理 | 落点 |
@@ -26,12 +44,11 @@
 
 ## 待观察 / 下一轮（2026-10-16）
 
-- **未在真实 Claude Code Workflow 运行时端到端跑过 fullstack**。本轮验证：`build --check` 绿、`tests/run.js` 73/73、三个 tools 对真实工作区（商业化团队空间全栈）试跑通过。建议用「运营积分看板」的后续迭代做第一次真跑
+- **未在真实 Claude Code Workflow 运行时端到端跑过 fullstack**。本轮验证：`build --check` 绿、`tests/run.js` 73/73、三个 tools 对真实工作区（team-fullstack）试跑通过。建议用「示例需求」的后续迭代做第一次真跑
 - `tools/contract-conformance.js` 只做了 dry-run 与结构测试，未对真实 dev 网关跑过；鉴权头的具体形态（Bearer / Cookie / 自定义 Header）要等第一次联调确认
-- 后端 dev 域名规则 `aicreator-dev-{module}.youmanvideo.com` 是推断，be-profile 初始化时需探测确认
+- 后端 dev 域名规则 `dev-{module}.example.com` 是推断，be-profile 初始化时需探测确认
 - `route=light` 的裁剪路径（跳过 ②③、⑥ 单评审员、⑦ 只跑门禁）在 SKILL.md 定义了，脚本层没有专门分支——light 时编排方少调几个脚本即可，但 ⑥ 单评审员目前没有现成脚本形态（可用 `code-audit` 子 agent 顶替）
 - Skill 是否改名 `just-dev`、前端仓 `.claude/agents/` 的 5 份手写人设是否删除：待用户定
-- `.workflow/*.yml` 中 harbor 密码明文入库：与本 Skill 无关，建议尽快处理
 
 ## 2026-09-21 已处理（第一轮实战反馈）
 

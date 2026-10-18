@@ -161,7 +161,7 @@ label `fe-architecture-design` / `be-architecture-design`，只读。prompt = �
 - `requirementFiles` = `fileList.add + modify + delete` 的 `path` 全集 → 写进 MEMORY「需求涉及文件」对应仓
 - be 额外返回 `modules` / `pipelines`（部署闸门用）；fe 额外返回 `mockPlan`（④ 用）
 
-## 报告模板（落盘 `<report_dir>/{fe|be}/architecture-{日期}.md`）
+## 报告模板（落盘 `<report_dir>/{fe|be}/architecture-{日期}-r{轮次}.md`）
 
 ```markdown
 # {前端|后端}架构设计方案

@@ -218,15 +218,15 @@ label = 维度 key。每个 prompt = 下方「评审员纪律」+ 「你评审�
 
 ## 汇总与判定
 
-- 未返回的维度**不计入分母**；每维 `score = min(返回值, maxScore)`
+- 3 个维度必须全部返回：缺失的维度原样重派一次，仍缺失 → 本轮判「无法完成」，停下交用户，不计分；每维 `score = min(返回值, maxScore)`
 - `finalScore = round(Σscore / Σmax × 100)`；`passed = finalScore ≥ 80 && !blockReason`；`maxRounds = 2`
-- 不过线 → `previousContract=本版全文` + `issues` 重跑本卡，`round+1`，**version 不变**；契约内容有实质变化时 `version+1`
+- 不过线 → `previousContract=本版全文` + `issues` 重跑本卡，`round+1`、`version+1`（修订后落盘为新的 `contract-v{N+1}.md` / `contract-review-v{N+1}.md`，旧版保留）
 - `contractJson` = 各 endpoint 的 `contract` 对象数组（⑤ 校验与 ④ Mock 的输入）
 - `modules` = endpoints 的 module 去重（记 MEMORY `be_modules`）；`needsGatewayRoute` = gatewayRoute==='new' 的 id
 
 ## 报告模板 A · 契约文档（落盘 `<report_dir>/contract-v{N}.md`）
 
-```markdown
+~~~markdown
 # 契约 v{N} · {需求短名}
 
 | 字段 | 值 |
@@ -306,7 +306,7 @@ label = 维度 key。每个 prompt = 下方「评审员纪律」+ 「你评审�
 
 ## 10. 待决
 {pending 逐条}
-```
+~~~
 
 ## 报告模板 B · 评审报告（落盘 `<report_dir>/contract-review-v{N}.md`）
 

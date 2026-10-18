@@ -133,7 +133,7 @@ prompt = 下方人设全文 + `---` + `## 本次评估的技术栈：{前端|后
 - `criticalGaps` = 「验收失败：…」+「回归失败：…」+「契约测试失败：…」+ 评估员的
 - 不过线 → 回对应 ④ 开发（缺口源于方案则回 ② 方案），`round+1`
 
-## 报告模板（落盘 `<report_dir>/{lane}/test-assessment-{日期}.md`）
+## 报告模板（落盘 `<report_dir>/{lane}/test-assessment-{日期}-r{轮次}.md`）
 
 ```markdown
 # {前端|后端}测试评估报告

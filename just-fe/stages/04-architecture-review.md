@@ -1,12 +1,12 @@
 # 阶段 ③ · 方案评审（dev-architecture-review，lane=fe | be）
 
-> 6 个评审员**同一条消息并行**派出，按派出顺序（下标）对应维度，不信 agent 回填的 dimension 字段。每维 `score = min(返回值, maxScore)`；未返回的维度**不计入分母**。子 agent 调用约定见 `references/运行时排错.md`。
+> 6 个评审员**同一条消息并行**派出，按派出顺序（下标）对应维度，不信 agent 回填的 dimension 字段。每维 `score = min(返回值, maxScore)`；6 个维度必须全部返回，缺失的维度原样重派一次，仍缺失 → 本轮判「无法完成」，停下交用户，不计分。子 agent 调用约定见 `references/运行时排错.md`。
 
 ## 入参
 
 | 入参 | 必填 | 来源 | 说明 |
 |------|------|------|------|
-| `architecture` | ✅ | `{lane}/architecture-{日期}.md` 全文 | 空 → `invalid_args` |
+| `architecture` | ✅ | 最新的 `{lane}/architecture-{日期}-r{轮次}.md` 全文 | 空 → `invalid_args` |
 | `lane` | ✅ | 泳道 | 决定维度组 |
 | `round` | 默认 1 | 轮次 | 最多 3 轮 |
 | `contract` | 推荐 | `contract-v{N}.md` 全文 | 方案引用的契约 id 必须存在于此 |
@@ -208,7 +208,7 @@
 - `finalScore = round(Σscore / Σmax × 100)`；`passed = finalScore ≥ 80`；`maxRounds = 3`
 - 不过线 → 把 `issues` 原文作为 `reviewIssues` 带回 ③ 方案（同泳道），`round+1`
 
-## 报告模板（落盘 `<report_dir>/{lane}/arch-review-{日期}.md`）
+## 报告模板（落盘 `<report_dir>/{lane}/arch-review-{日期}-r{轮次}.md`）
 
 ```markdown
 # {前端|后端}方案评审报告
@@ -242,7 +242,7 @@
  打回：带上述问题清单重出方案（reviewIssues=本表），再以 round+1 重评。已达 3 轮请人工介入：放宽、人工改方案，或拆需求。}
 
 ---
-**评审标准**: 80 分红线；未返回的维度不计入分母。口径见 references/评分口径.md。
+**评审标准**: 80 分红线；6 个维度全部返回才计分。口径见 references/评分口径.md。
 ```
 
 ## 返回对象（写进 MEMORY）

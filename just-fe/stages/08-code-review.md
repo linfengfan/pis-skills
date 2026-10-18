@@ -1,16 +1,16 @@
 # 阶段 ⑥ · 代码 Review（dev-code-review，lane=fe | be，每仓一次）
 
-> 7 个评审员**同一条消息并行**派出，按派出顺序（下标）对应维度，不信 agent 回填的 dimension 字段。**未返回的维度按 0 分计、分母恒为 100**（结论偏保守）。fullstack 时两仓各跑一次，两仓都过才进 ⑦。子 agent 调用约定见 `references/运行时排错.md`。
+> 7 个评审员**同一条消息并行**派出，按派出顺序（下标）对应维度，不信 agent 回填的 dimension 字段。7 个维度必须全部返回：缺失的维度原样重派一次，仍缺失 → 本轮判「无法完成」，停下交用户，不计分。fullstack 时两仓各跑一次，两仓都过才进 ⑦。子 agent 调用约定见 `references/运行时排错.md`。
 
 ## 前置：越界文件用脚本算（Bash，不是 agent）
 
 每个仓一次，在仓库根执行：
 
 ```bash
-printf '%s\n' <该仓「需求涉及文件」，一行一个> | bash <just-fe>/tools/out-of-scope.sh <repoPath> <base> -
+printf '%s\n' <该仓「需求涉及文件」，一行一个> | bash <just-fe>/tools/out-of-scope.sh <repoPath> <base> - <report_dir>/<lane>/baseline-status.txt
 ```
 
-输出 JSON 的 `outOfScope` 数组作为入参 `outOfScopeFiles`（实际改动 = 已提交 `base...HEAD` ∪ 工作区未提交）。退出码 1 = 有越界文件，是正常信号。
+输出 JSON 的 `outOfScope` 数组作为入参 `outOfScopeFiles`（实际改动 = 已提交 `base...HEAD` ∪ 工作区未提交；本地没有 `<base>` 分支时脚本自动改用 `origin/<base>`，输出的 `baseRef` 为 null 时说明只统计了工作区改动，要在评审报告里注明）。`preexisting` 是 ④ 开工前就有的改动，不属于本次评审对象，也不算越界。退出码 1 = 有越界文件，是正常信号。没有 `baseline-status.txt`（旧需求）时省略第 4 个参数。
 
 ## 入参
 
@@ -176,12 +176,12 @@ label `<lane>-<key>`，只读。
 
 ## 汇总与判定
 
-- 每维 `score = min(返回值, maxScore)`；未返回 → 0 分，分母仍 100
+- 7 个维度全部返回后计分（缺失见卡首规则）；每维 `score = min(返回值, maxScore)`
 - `finalScore = Σscore`；`hasCritical = criticalIssues 非空`；`passed = finalScore ≥ 80 && !hasCritical`
 - `verdict`：有 critical →（`<60` → `rewrite`，否则 `reject`）；无 critical →（`≥90` → `merge`，`≥80` → `conditional`，`≥60` → `reject`，否则 `rewrite`）
 - `maxRounds = 2`；不过线 → 把 `criticalIssues + minorIssues` 原文带回对应 ④ 开发，`round+1`
 
-## 报告模板（落盘 `<report_dir>/{lane}/code-review-{日期}.md`）
+## 报告模板（落盘 `<report_dir>/{lane}/code-review-{日期}-r{轮次}.md`）
 
 ```markdown
 # {前端|后端}代码 Review 报告

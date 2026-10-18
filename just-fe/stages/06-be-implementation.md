@@ -9,7 +9,7 @@
 | `requirement` | ✅ | MEMORY / ① | |
 | `contract` | ✅ | `contract-v{N}.md` 全文 | 空 → `needs_contract`，**不派 agent** |
 | `contractJson` | 推荐 | ② 契约的 `contractJson` | 其中 `status≠existing` 的 id = 必须实现且有契约测试的接口 |
-| `architecture` | 推荐 | `be/architecture-{日期}.md` 全文 | 文件清单即「需求涉及文件」基准 |
+| `architecture` | 推荐 | 最新的 `be/architecture-{日期}-r{轮次}.md` 全文 | 文件清单即「需求涉及文件」基准 |
 | `taskCards` | 推荐 | ②-BE 的任务卡 | |
 | `modules` | 推荐 | 契约的 `modules` / MEMORY `be_modules` | `mvn -pl` 目标 |
 | `projectContext` | 强烈推荐 | be-profile 全文 | 命令与约定以此为准 |
@@ -18,6 +18,16 @@
 
 - `requirement` 空 → `invalid_args`
 - `contract` 空 → `status=needs_contract`：DTO / VO / 错误码必须逐字段对齐契约，没有契约不启动开发
+
+## 开工前：记录基线（Bash，不是 agent）
+
+本泳道第一次进入 ④ 时，在后端仓根目录执行（打回重跑沿用同一份，不重新记录）：
+
+```bash
+git -c core.quotepath=false status --porcelain > <report_dir>/be/baseline-status.txt
+```
+
+这些是用户开工前就有的改动，⑥ 跑越界脚本时作为第 4 个参数传入，归为「原有改动」，不算开发 agent 越界。
 
 ## 子 agent ×1（必须有写权限与构建命令执行权限）
 
@@ -118,7 +128,7 @@ label `be-development`。prompt = 下方人设全文 + `---` + `## 待开发需�
 - `publicModulesTouched` 非空 → 闸门汇报时点出（会触发多条流水线）
 - `completedFiles` 写进 MEMORY be 仓「需求涉及文件」
 
-## 报告模板（落盘 `<report_dir>/be/impl-{日期}.md`）
+## 报告模板（落盘 `<report_dir>/be/impl-{日期}-r{轮次}.md`）
 
 ```markdown
 # 后端接口开发报告

@@ -32,18 +32,55 @@ function sh(cmd, cwd) {
 }
 const exists = p => fs.existsSync(p)
 
+// .code-workspace 是 JSONC：允许 BOM、// 与 /* */ 注释、尾逗号
+function readJsonc(file) {
+  const s = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')
+  let out = ''
+  let inStr = false
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (inStr) {
+      out += c
+      if (c === '\\') { out += s[++i]; continue }
+      if (c === '"') inStr = false
+      continue
+    }
+    if (c === '"') { inStr = true; out += c; continue }
+    if (c === '/' && s[i + 1] === '/') { while (i < s.length && s[i] !== '\n') i++; out += '\n'; continue }
+    if (c === '/' && s[i + 1] === '*') { i += 2; while (i < s.length && !(s[i] === '*' && s[i + 1] === '/')) i++; i++; continue }
+    out += c
+  }
+  return JSON.parse(out.replace(/,(\s*[}\]])/g, '$1'))
+}
+
+const FE_DEPS = ['vue', 'react', 'react-dom', 'preact', '@angular/core', 'svelte', 'solid-js', 'next', 'nuxt']
+function detectLane(dir) {
+  const hasBe = ['pom.xml', 'build.gradle', 'build.gradle.kts'].some(f => exists(path.join(dir, f)))
+  let feDeps = false
+  if (exists(path.join(dir, 'package.json'))) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8').replace(/^\uFEFF/, ''))
+      feDeps = Object.keys({ ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) }).some(d => FE_DEPS.includes(d))
+    } catch (_) {}
+  }
+  // 后端仓里常有只装 husky / commitlint 的 package.json，有构建文件且没有前端框架依赖就判为 be
+  if (hasBe && !feDeps) return 'be'
+  if (exists(path.join(dir, 'package.json'))) return 'fe'
+  return hasBe ? 'be' : 'unknown'
+}
+
 let folders = []
 let workspaceFile = null
 if (target.endsWith('.code-workspace') && exists(target)) {
   workspaceFile = target
-  const ws = JSON.parse(fs.readFileSync(target, 'utf8').replace(/^\uFEFF/, ''))
+  const ws = readJsonc(target)
   const root = path.dirname(target)
   folders = (ws.folders || []).map(f => path.resolve(root, f.path))
 } else if (exists(target) && fs.statSync(target).isDirectory()) {
   const wsFiles = fs.readdirSync(target).filter(f => f.endsWith('.code-workspace'))
   if (wsFiles.length === 1) {
     workspaceFile = path.join(target, wsFiles[0])
-    const ws = JSON.parse(fs.readFileSync(workspaceFile, 'utf8'))
+    const ws = readJsonc(workspaceFile)
     folders = (ws.folders || []).map(f => path.resolve(target, f.path))
   } else {
     folders = fs.readdirSync(target).filter(f => !f.startsWith('.')).map(f => path.join(target, f)).filter(p => fs.statSync(p).isDirectory())
@@ -58,7 +95,7 @@ for (const dir of folders) {
   if (!exists(dir)) { notes.push(`目录不存在：${dir}`); continue }
   const isGit = exists(path.join(dir, '.git'))
   if (isGit) {
-    const lane = exists(path.join(dir, 'package.json')) ? 'fe' : (exists(path.join(dir, 'pom.xml')) || exists(path.join(dir, 'build.gradle')) || exists(path.join(dir, 'build.gradle.kts'))) ? 'be' : 'unknown'
+    const lane = detectLane(dir)
     const branch = sh('git rev-parse --abbrev-ref HEAD', dir)
     const dirty = sh('git status --porcelain', dir) !== ''
     const remoteBranches = sh('git branch -r --format=%(refname:short)', dir).split('\n')
@@ -93,7 +130,8 @@ for (const dir of folders) {
           return { module: f.replace(/-dev\.ya?ml$/, ''), file: f, triggerBranch: branch, paths }
         })
       }
-      const modules = (fs.readFileSync(path.join(dir, 'pom.xml'), 'utf8').match(/<module>([^<]+)<\/module>/g) || []).map(m => m.replace(/<\/?module>/g, ''))
+      const pom = path.join(dir, 'pom.xml')
+      const modules = exists(pom) ? (fs.readFileSync(pom, 'utf8').match(/<module>([^<]+)<\/module>/g) || []).map(m => m.replace(/<\/?module>/g, '')) : []
       if (modules.length) repo.modules = modules
     }
     repos.push(repo)

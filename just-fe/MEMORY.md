@@ -9,7 +9,7 @@ gate_mode: gated | auto
 scope: 全流程            # 本期做到哪个阶段（stopAt），如 ②
 source: -                # 需求来源与优先级，如 prd-v2.2.md > 在线原型 > prd.md
 report_dir: -            # 流程产物目录，默认 <会话区>/新需求/<需求短名>/
-stack: fe | be | fullstack
+stack: fe | be | fullstack       # 即 ① 返回的 stackScope
 route: light | full | blocked
 current_stage: -
 resume_from: -
@@ -36,18 +36,18 @@ deploy: { deployedAt: -, pipelines: [] }
 | ⓪ 工作区确认 | — | ⏳ | - | MEMORY.md 头部字段 |
 | ① 需求梳理 | — | ⏳ | - | triage-{日期}.md |
 | ② 契约设计 + ③a 契约评审 | — | ⏳ | - | contract-v{N}.md、contract-review-v{N}.md |
-| ② 方案架构 | fe | ⏳ | - | fe/architecture-{日期}.md |
-| ② 方案架构 | be | ⏳ | - | be/architecture-{日期}.md |
-| ③ 方案评审 | fe | ⏳ | - | fe/arch-review-{日期}.md |
-| ③ 方案评审 | be | ⏳ | - | be/arch-review-{日期}.md |
-| ④ UI 开发 | fe | ⏳ | - | fe/ui-{日期}.md（原型走查另有 prototype-interactions-{日期}.md） |
-| ④ 接口开发 | be | ⏳ | - | be/impl-{日期}.md |
+| ② 方案架构 | fe | ⏳ | - | fe/architecture-{日期}-r{轮次}.md |
+| ② 方案架构 | be | ⏳ | - | be/architecture-{日期}-r{轮次}.md |
+| ③ 方案评审 | fe | ⏳ | - | fe/arch-review-{日期}-r{轮次}.md |
+| ③ 方案评审 | be | ⏳ | - | be/arch-review-{日期}-r{轮次}.md |
+| ④ UI 开发 | fe | ⏳ | - | fe/ui-{日期}-r{轮次}.md、fe/baseline-status.txt（原型走查另有 prototype-interactions-{日期}.md） |
+| ④ 接口开发 | be | ⏳ | - | be/impl-{日期}-r{轮次}.md、be/baseline-status.txt |
 | 🚀 部署闸门 | be | ⏳ | - | MEMORY `deploy` 字段 |
-| ⑤ 接口联调 | fe | ⏳ | - | conformance-{日期}.json、integration-{日期}.md |
-| ⑥ 代码 Review | fe | ⏳ | - | fe/code-review-{日期}.md |
-| ⑥ 代码 Review | be | ⏳ | - | be/code-review-{日期}.md |
-| ⑦ 测试评估 | fe | ⏳ | - | fe/test-assessment-{日期}.md |
-| ⑦ 测试评估 | be | ⏳ | - | be/test-assessment-{日期}.md |
+| ⑤ 接口联调 | fe | ⏳ | - | conformance-{日期}-r{轮次}.json、integration-{日期}-r{轮次}.md |
+| ⑥ 代码 Review | fe | ⏳ | - | fe/code-review-{日期}-r{轮次}.md |
+| ⑥ 代码 Review | be | ⏳ | - | be/code-review-{日期}-r{轮次}.md |
+| ⑦ 测试评估 | fe | ⏳ | - | fe/test-assessment-{日期}-r{轮次}.md |
+| ⑦ 测试评估 | be | ⏳ | - | be/test-assessment-{日期}-r{轮次}.md |
 | ⑧ 变更说明 + 提交清单 | — | ⏳ | - | change-{日期}.md |
 
 状态取值：`⏳ 未开始` / `🔄 进行中` / `⏸ 已完成，等待用户确认` / `✅ 完成` / `✅ 用户确认完成` / `⏭ 用户跳过` / `⏭ 不适用（stack / mode 决定）` / `❌ 打回`

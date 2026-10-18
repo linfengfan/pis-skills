@@ -1,6 +1,6 @@
 ---
 name: just-fe
-description: 当用户要开发前端、后端或全栈功能，做需求分析、接口契约、方案评审，要求走研发流程，或提到 "just-fe / 研发流程 / 契约 / 代码评审打分" 时使用。也用于从某个阶段续接或恢复中断的流程。适用于一个前端仓 + 一个后端仓 + 一个会话区的工作区；纯前端需求自动退化为单泳道。改一行文案、修一个单文件明显 bug 不用本 Skill，直接改。
+description: 当用户要开发前端、后端或全栈功能，做需求分析、接口契约、方案评审，要求走研发流程，或提到 "just-fe / 研发流程 / 契约 / 代码评审打分" 时使用。也用于从某个阶段续接或恢复中断的流程。适用于一个前端仓 + 一个后端仓 + 一个会话区、后端经部署闸门发布到 dev 环境再联调的团队工作区；纯前端需求自动退化为单泳道。与 just-flf 是两套独立流程，不要同时安装。改一行文案、修一个单文件明显 bug 不用本 Skill，直接改。
 ---
 
 # 全栈研发工作流（just-fe）
@@ -30,12 +30,13 @@ description: 当用户要开发前端、后端或全栈功能，做需求分析�
    🎨 设计稿闸门     （无）
    ④-FE UI 开发     ④-BE 接口开发（必须有契约测试，本地 compile / spotless / test 过）
    └───────────────┴───────────────┘
-   🚀 部署闸门：你产出「合入 dev 并 push」的命令与会触发的流水线，用户执行，回复「已部署」+ gatewayUrl + 鉴权方式
+   🚀 部署闸门：先给后端待提交清单（用户在特性分支提交），再给「合入 dev 并 push」命令、会触发的流水线、
+   │  需先执行的 DDL 与需配置的网关路由；用户执行后回复「已部署」+ gatewayUrl（凭证写本地文件，不贴对话）
    │
-⑤ tools/contract-conformance.js 对 dev 网关逐接口校验 → 联调 agent 换真接口
+⑤ tools/contract-conformance.js 对 dev 网关逐接口校验（默认只发只读请求）→ 联调 agent 换真接口
    │  任一 FAIL → 不进 ⑥，后端修实现或契约升版本
    ▼
-⑥ 代码 Review：tools/out-of-scope.sh 算越界 → 每仓 7 维并行；两仓都 ≥80 且无 🔴
+⑥ 代码 Review：tools/out-of-scope.sh 算越界（排除 ④ 开工前已有的改动）→ 每仓 7 维并行；两仓都 ≥80 且无 🔴
    ▼
 ⑦ 测试评估：每仓先取证再打分；fe E2E 打 dev 网关，be 单测 + 契约测试；验收 / 回归 / 契约测试失败一票否决
    ▼
@@ -44,7 +45,7 @@ description: 当用户要开发前端、后端或全栈功能，做需求分析�
 
 `⛩` = 阶段闸门。默认每个阶段结束都停下来问用户；`--auto` 才连续跑，但阻断 / 打回 / 达轮次上限 / 设计稿 / 部署 / 后端权限这几类仍必停。
 
-`stackScope=fe` 且后端仓 `readonly`：契约阶段退化为「勘察 + 复用清单」，BE 泳道、部署闸门、be 的 ⑥⑦ 全部标 `⏭ 不适用`。`route=light`：跳过 ②③ 打分，④ → ⑥（单评审员即可）→ ⑦（只跑门禁）→ ⑧。
+`stackScope=fe` 且后端仓 `readonly`：契约阶段退化为「勘察 + 复用清单」，BE 泳道、部署闸门、be 的 ⑥⑦ 全部标 `⏭ 不适用`。`route=light` 与 `stackScope=be` 的走法见下文「lite 档与纯后端需求」。
 
 ## ⓪ 工作区确认（① 之前，只做一次）
 
@@ -70,7 +71,19 @@ description: 当用户要开发前端、后端或全栈功能，做需求分析�
 |------|------|-----------|
 | 🎨 设计稿 | ④-FE 之前 | 读 ① 的 `uiChange` / `designAssets`。`uiChange=false` → 问用户是否跳过 ④-FE；有链接（Figma / 蓝湖 / 在线原型 / 截图）→ 作 `designUrl` 传入，在线原型可先下载源码走查并落 `prototype-interactions-{日期}.md`；没有 → **先问用户**要链接或明确的「无设计稿，按现有风格」原话作 `noDesignReason`。两者都没有不进 ④-FE |
 | 🔐 后端权限 | ① 返回 `needsBackendWrite=true` 而 MEMORY `repos[be].mode=readonly` | 停下问用户：改为可写（本流程实现）还是保持只读（契约只定义、交后端团队，BE 泳道不启动） |
-| 🚀 部署 | ④-BE `completed` 之后、⑤ 之前 | 用 MEMORY 的 `repos[be]`、`be_modules`、流水线表生成 `git checkout <base> && git merge --no-ff <branch> && git push origin <base>` 与「会触发的流水线」清单给用户。**你不执行**。用户回复「已部署」+ `gatewayUrl` + 鉴权方式后写 MEMORY `deploy` / `env.dev`，再跑 ⑤ 的校验脚本 |
+| 🚀 部署 | ④-BE `completed` 之后、⑤ 之前 | 开发 agent 不提交，所以合入前必须先提交。依次给用户：① **待提交清单**——④-BE 的 `completedFiles`（先用 `tools/out-of-scope.sh` 核对，越界文件建议先回退）与建议 commit message，请用户在特性分支 `repos[be].branch` 上提交；② **合入命令** `git checkout <base> && git merge --no-ff <branch> && git push origin <base>` 与「会触发的流水线」清单（来自 MEMORY `be_modules` 与流水线表）；③ **部署前置**——④-BE 报告里的 DDL / 迁移脚本需要先在 dev 库执行，契约里 `needsGatewayRoute` 的接口需要先配置网关路由。**你不执行任何一步**。用户回复「已部署」+ `gatewayUrl` 后写 MEMORY `deploy` / `env.dev`；鉴权请用户写进本地文件（如 `~/.just-fe/auth`，每行一个 `Header: value`，权限 600），MEMORY 只记文件位置，不让用户把 token 贴进对话。然后跑 ⑤ 的校验脚本 |
+
+## 打回回路
+
+- ⑥ 打回 → 对应 ④ 只修汇总里的问题 → 重跑 ⑥。
+- ⑦ 打回 → 对应 ④（缺口源于方案则回 ②-方案）→ **必须重跑 ⑥** → 再跑 ⑦。修复不能绕过代码评审。
+- 后端在 ⑤ / ⑥ / ⑦ 之后又改了代码 → 重新走 🚀 部署闸门（提交、合入、部署）→ 重跑 ⑤ 的校验脚本，再继续。
+- 契约升版本（v{N} → v{N+1}）→ 已完成的 ②-方案、④、⑤ 按新契约复核：受影响的泳道重跑对应阶段，或由用户在闸门处明确确认沿用；两泳道的 ④ 都要拿到新版契约。
+
+## lite 档与纯后端需求
+
+- **`route=light`**：跳过 ②③（不出契约、不出方案）。④ 照常；⑥ 用 `stages/08-code-review.md`，但只派 **1 个**评审员（label `<lane>-all`）：prompt 里依次放入 7 个维度的正文与检查清单，要求输出 7 个 `CODE_DIMENSION_SCHEMA` 对象组成的 JSON 数组（顺序与维度一致），汇总公式与一票否决不变；⑦ 只派取证 agent（子 agent 1），不派评估员、不打分，按一票否决规则判定通过与否，`unverified` 照常进人工清单；然后 ⑧。
+- **`stackScope=be`**：没有前端泳道，跳过 🎨 与 ④-FE。部署后 ⑤ 只跑第一步契约校验脚本，不派联调 agent；有 FAIL 同样不进 ⑥。⑥⑦ 只跑 be。
 
 ## 用户点名阶段：跳转优先，状态先同步
 
@@ -127,18 +140,21 @@ description: 当用户要开发前端、后端或全栈功能，做需求分析�
 | ⓪ | `MEMORY.md` |
 | ① | `triage-{日期}.md`；原型走查 `prototype-interactions-{日期}.md` |
 | ② 契约 | `contract-v{N}.md`、`contract-review-v{N}.md` |
-| ②③ 方案 | `fe/architecture-{日期}.md`、`fe/arch-review-{日期}.md`；`be/…` 同 |
-| ④ | `fe/ui-{日期}.md`；`be/impl-{日期}.md` |
-| ⑤ | `conformance-{日期}.json`、`integration-{日期}.md` |
-| ⑥ | `fe/code-review-{日期}.md`；`be/code-review-{日期}.md` |
-| ⑦ | `fe/test-assessment-{日期}.md`；`be/test-assessment-{日期}.md` |
+| ②③ 方案 | `fe/architecture-{日期}-r{轮次}.md`、`fe/arch-review-{日期}-r{轮次}.md`；`be/…` 同 |
+| ④ | `fe/ui-{日期}-r{轮次}.md`、`fe/baseline-status.txt`；`be/impl-{日期}-r{轮次}.md`、`be/baseline-status.txt` |
+| ⑤ | `conformance-{日期}-r{轮次}.json`、`integration-{日期}-r{轮次}.md` |
+| ⑥ | `fe/code-review-{日期}-r{轮次}.md`；`be/code-review-{日期}-r{轮次}.md` |
+| ⑦ | `fe/test-assessment-{日期}-r{轮次}.md`；`be/test-assessment-{日期}-r{轮次}.md` |
 | ⑧ | `change-{日期}.md` |
+
+`{轮次}` 是该阶段在本需求里的第几次执行（打回重跑 +1），这样同一天的多轮产物不会互相覆盖。同一阶段有多个文件时取日期最新、轮次最大的；旧版没有 `-r{轮次}` 的文件名视为 `r1`，照常识别。
 
 存在且完整 → 直接进入该阶段；存在但不完整 → 从该阶段重新开始；不存在 → 回溯前置阶段。
 
 ## 评分铁律
 
 - 契约评审 / 方案评审 / 代码 Review / 测试评估 均 **80 分红线**，不到线必须打回，轮次见 `references/评分口径.md`
+- 并行评审员必须**全部返回**才算分：缺失的维度原样重派一次，仍缺失则本轮判「无法完成」，停下交用户，不计分
 - 代码 Review 任一 🔴 critical → 一票否决；fullstack 两仓都要过
 - 测试评估任一验收标准取证失败 / 既有测试回归失败 / 契约测试失败 → 一票否决
 - 联调前契约校验任一 FAIL → 不进 ⑥

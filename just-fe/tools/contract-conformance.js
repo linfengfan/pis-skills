@@ -5,15 +5,22 @@
  *
  *   node tools/contract-conformance.js \
  *     --contract <report_dir>/contract-v1.md \
- *     --base-url https://aicreator-dev-platform-gateway.youmanvideo.com \
- *     --header "Authorization: Bearer xxx" [--header "X-Space-Id: ..."] \
- *     [--only fav.add,fav.list] [--timeout 15000] [--success-codes 0,200] \
+ *     --base-url https://dev-gateway.example.com \
+ *     --header-file ~/.just-fe/auth \
+ *     [--allow-write fav.add] [--only fav.add,fav.list] [--timeout 15000] [--success-codes 0,200] \
  *     [--code-field code --data-field data] \
- *     [--out <report_dir>/conformance-20261016.json] [--dry-run]
+ *     [--out <report_dir>/conformance-20261016-r1.json] [--dry-run]
  *
+ * 凭证：推荐 --header-file（每行一个 "Header: value"，权限 600），token 不会留在命令行与对话记录里；
+ *       --header "K: V" 仍可用（兼容旧用法）。
+ * 默认只发送 GET / HEAD；写接口（POST / PUT / PATCH / DELETE）会在联调环境真实写数据，
+ *       默认不发送、标 UNVERIFIED，用户同意后用 --allow-write <id,…> 放行。
  * 输出 JSON（stdout 或 --out）：
- *   { baseUrl, checkedAt, results: [{ id, method, path, status: PASS|FAIL|UNVERIFIED, httpStatus, diffs[], reason }], summary }
- * 退出码：有 FAIL → 1；否则 0（UNVERIFIED 不算失败，由 ⑦ 进人工清单）
+ *   { baseUrl, checkedAt, results: [{ id, method, path, status: PASS|PARTIAL|FAIL|UNVERIFIED, httpStatus, diffs[], unchecked[], reason }], summary }
+ *   PARTIAL：没有不符项，但有字段无法核对（如数组为空，元素字段未核对），进人工清单。
+ *   HTTP 401 / 403 与返回 HTML 页面（常见于未登录被重定向）判 UNVERIFIED。
+ *   只核对成功路径：字段、类型、可空、统一响应体 code；契约里的 errors 不发请求核对。
+ * 退出码：有 FAIL → 1；否则 0（PARTIAL / UNVERIFIED 不算失败，由 ⑦ 进人工清单）
  *
  * 零依赖，Node ≥ 18（用全局 fetch）。本脚本在 Workflow 运行时之外执行，允许用 Date。
  *
@@ -37,7 +44,7 @@ const path = require('path')
 
 // ---------- 参数 ----------
 const argv = process.argv.slice(2)
-const opts = { headers: [], timeout: 15000, successCodes: [0, 200], codeField: 'code', dataField: 'data', only: null, dryRun: false }
+const opts = { headers: [], timeout: 15000, successCodes: [0, 200], codeField: 'code', dataField: 'data', only: null, allowWrite: [], dryRun: false }
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i]
   const next = () => argv[++i]
@@ -45,6 +52,8 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--contract-json') opts.contractJson = next()
   else if (a === '--base-url') opts.baseUrl = next()
   else if (a === '--header' || a === '--auth') opts.headers.push(next())
+  else if (a === '--header-file') opts.headerFile = next()
+  else if (a === '--allow-write') opts.allowWrite = next().split(',').map(s => s.trim()).filter(Boolean)
   else if (a === '--only') opts.only = next().split(',').map(s => s.trim()).filter(Boolean)
   else if (a === '--timeout') opts.timeout = Number(next())
   else if (a === '--success-codes') opts.successCodes = next().split(',').map(s => Number(s.trim()))
@@ -82,6 +91,19 @@ for (const h of opts.headers) {
   const idx = h.indexOf(':')
   if (idx > 0) headers[h.slice(0, idx).trim()] = h.slice(idx + 1).trim()
 }
+if (opts.headerFile) {
+  const file = opts.headerFile.replace(/^~(?=\/)/, process.env.HOME || '~')
+  if (!fs.existsSync(file)) { console.error(`凭证文件不存在：${file}`); process.exit(2) }
+  if (process.platform !== 'win32' && (fs.statSync(file).mode & 0o077)) console.error(`⚠️ ${file} 权限过宽，建议 chmod 600`)
+  fs.readFileSync(file, 'utf8').split(/\r?\n/).forEach((line, n) => {
+    const t = line.trim()
+    if (!t || t.startsWith('#')) return
+    const idx = t.indexOf(':')
+    if (idx > 0) headers[t.slice(0, idx).trim()] = t.slice(idx + 1).trim()
+    else console.error(`⚠️ 凭证文件第 ${n + 1} 行不是 "Header: value" 格式，已忽略`)
+  })
+}
+const WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE']
 
 // ---------- 类型比对 ----------
 function typeOf(v) {
@@ -101,7 +123,7 @@ function typeMatches(expected, actual) {
   if (exp === 'object') return actual === 'object'
   return true // 未知类型名不判
 }
-function compareFields(spec, data, prefix, diffs) {
+function compareFields(spec, data, prefix, diffs, unchecked) {
   if (!spec || typeof spec !== 'object') return
   if (data === null || data === undefined || typeof data !== 'object') {
     if (Object.keys(spec).length) diffs.push(`${prefix || 'data'} 不是对象，无法核对字段`)
@@ -115,9 +137,10 @@ function compareFields(spec, data, prefix, diffs) {
     if (v === null) { if (f.nullable === false) diffs.push(`字段 ${p} 为 null 但契约 nullable=false`); continue }
     const t = typeOf(v)
     if (!typeMatches(f.type, t)) diffs.push(`字段 ${p} 类型 ${t}，契约为 ${f.type}`)
-    if (f.fields && t === 'object') compareFields(f.fields, v, p, diffs)
+    if (f.fields && t === 'object') compareFields(f.fields, v, p, diffs, unchecked)
+    if (f.items && t === 'array' && !v.length && (f.items.fields || f.items.type)) unchecked.push(`${p}[]（数组为空，元素字段未核对）`)
     if (f.items && t === 'array' && v.length) {
-      if (f.items.fields && typeof v[0] === 'object') compareFields(f.items.fields, v[0], `${p}[0]`, diffs)
+      if (f.items.fields && typeof v[0] === 'object') compareFields(f.items.fields, v[0], `${p}[0]`, diffs, unchecked)
       else if (f.items.type && !typeMatches(f.items.type, typeOf(v[0]))) diffs.push(`字段 ${p}[0] 类型 ${typeOf(v[0])}，契约为 ${f.items.type}`)
     }
   }
@@ -162,7 +185,11 @@ function buildRequest(e) {
 
 // ---------- 执行 ----------
 async function checkOne(e) {
-  const r = { id: e.id, method: e.method.toUpperCase(), path: e.path, module: e.module, contractStatus: e.status, status: 'UNVERIFIED', httpStatus: null, diffs: [], reason: '' }
+  const r = { id: e.id, method: e.method.toUpperCase(), path: e.path, module: e.module, contractStatus: e.status, status: 'UNVERIFIED', httpStatus: null, diffs: [], unchecked: [], reason: '' }
+  if (WRITE_METHODS.includes(r.method) && !opts.allowWrite.includes(e.id)) {
+    r.reason = '写接口默认不发送（会在联调环境真实写数据）；用户同意后用 --allow-write 放行'
+    return r
+  }
   const { url, body, missing } = buildRequest(e)
   r.url = url
   if (missing.length) { r.reason = `缺示例值无法构造请求：${missing.join(', ')}`; return r }
@@ -179,10 +206,14 @@ async function checkOne(e) {
       signal: ctrl.signal,
     })
     r.httpStatus = res.status
+    if (res.status === 401 || res.status === 403) { r.reason = `HTTP ${res.status}，鉴权不足，无法验证`; return r }
     const text = await res.text()
     let json
-    try { json = JSON.parse(text) } catch (_) { r.status = 'FAIL'; r.diffs.push(`响应不是 JSON（HTTP ${res.status}）：${text.slice(0, 120)}`); return r }
-    if (res.status === 401 || res.status === 403) { r.reason = `HTTP ${res.status}，鉴权不足，无法验证`; return r }
+    try { json = JSON.parse(text) } catch (_) {
+      const isHtml = /text\/html/i.test(res.headers.get('content-type') || '') || /^\s*</.test(text)
+      if (isHtml && res.status < 400) { r.reason = `返回 HTML 页面（HTTP ${res.status}），常见于未登录被重定向，无法验证`; return r }
+      r.status = 'FAIL'; r.diffs.push(`响应不是 JSON（HTTP ${res.status}）：${text.slice(0, 120)}`); return r
+    }
     if (res.status >= 500) { r.status = 'FAIL'; r.diffs.push(`HTTP ${res.status} 服务端错误`); return r }
     if (env.codeField && Object.prototype.hasOwnProperty.call(json, env.codeField)) {
       const code = json[env.codeField]
@@ -196,8 +227,8 @@ async function checkOne(e) {
     }
     const data = env.dataField ? json[env.dataField] : json
     const spec = (e.response && (e.response[env.dataField] || e.response.data || e.response)) || {}
-    compareFields(spec, data, '', r.diffs)
-    r.status = r.diffs.length ? 'FAIL' : 'PASS'
+    compareFields(spec, data, '', r.diffs, r.unchecked)
+    r.status = r.diffs.length ? 'FAIL' : r.unchecked.length ? 'PARTIAL' : 'PASS'
     return r
   } catch (err) {
     r.reason = err.name === 'AbortError' ? `超时 ${opts.timeout}ms` : `请求失败：${err.message}`
@@ -212,11 +243,13 @@ async function checkOne(e) {
   for (const e of endpoints) {
     const r = await checkOne(e)
     results.push(r)
-    const mark = r.status === 'PASS' ? '✅' : r.status === 'FAIL' ? '❌' : '⏳'
-    console.error(`${mark} ${r.id} ${r.method} ${r.path}${r.httpStatus ? ` → ${r.httpStatus}` : ''}${r.diffs.length ? `\n   ${r.diffs.join('\n   ')}` : ''}${r.reason ? `\n   ${r.reason}` : ''}`)
+    const mark = { PASS: '✅', PARTIAL: '🟡', FAIL: '❌', UNVERIFIED: '⏳' }[r.status]
+    const notes = [...r.diffs, ...r.unchecked]
+    console.error(`${mark} ${r.id} ${r.method} ${r.path}${r.httpStatus ? ` → ${r.httpStatus}` : ''}${notes.length ? `\n   ${notes.join('\n   ')}` : ''}${r.reason ? `\n   ${r.reason}` : ''}`)
   }
   const summary = {
     pass: results.filter(r => r.status === 'PASS').length,
+    partial: results.filter(r => r.status === 'PARTIAL').length,
     fail: results.filter(r => r.status === 'FAIL').length,
     unverified: results.filter(r => r.status === 'UNVERIFIED').length,
   }
@@ -224,6 +257,6 @@ async function checkOne(e) {
   const json = JSON.stringify(out, null, 2)
   if (opts.out) { fs.mkdirSync(path.dirname(opts.out), { recursive: true }); fs.writeFileSync(opts.out, json); console.error(`\n已写入 ${opts.out}`) }
   else console.log(json)
-  console.error(`\n✅ ${summary.pass} · ❌ ${summary.fail} · ⏳ ${summary.unverified}`)
+  console.error(`\n✅ ${summary.pass} · 🟡 ${summary.partial} · ❌ ${summary.fail} · ⏳ ${summary.unverified}`)
   process.exit(summary.fail > 0 ? 1 : 0)
 })()

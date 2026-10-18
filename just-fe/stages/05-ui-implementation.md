@@ -19,6 +19,16 @@
 - `requirement` 空 → `invalid_args`
 - `designUrl` 与 `noDesignReason` 都空 → `status=needs_design`，`nextStep=ask_user_for_design`。编排者不该走到这里——按 SKILL.md 设计稿闸门，调用前就该问过用户
 
+## 开工前：记录基线（Bash，不是 agent）
+
+本泳道第一次进入 ④ 时，在前端仓根目录执行（打回重跑沿用同一份，不重新记录）：
+
+```bash
+git -c core.quotepath=false status --porcelain > <report_dir>/fe/baseline-status.txt
+```
+
+这些是用户开工前就有的改动，⑥ 跑越界脚本时作为第 4 个参数传入，归为「原有改动」，不算开发 agent 越界。
+
 ## 子 agent ×1（必须有写权限）
 
 label `ui-development`。prompt = `roles/fe-dev.md` 全文 + `---` + 以下各节 + 「请执行 UI 开发，产出生产级代码，并输出结构化报告。」+ `UI_DEV_SCHEMA` 尾注
@@ -83,7 +93,7 @@ label `ui-development`。prompt = `roles/fe-dev.md` 全文 + `---` + 以下各�
 - `outOfScopeChanges` 非空 → 闸门汇报时点出，⑥ 复核
 - `completedFiles` 与 `mockFiles` 写进 MEMORY fe 仓「需求涉及文件」
 
-## 报告模板（落盘 `<report_dir>/fe/ui-{日期}.md`）
+## 报告模板（落盘 `<report_dir>/fe/ui-{日期}-r{轮次}.md`）
 
 ```markdown
 # 页面 UI 开发报告
