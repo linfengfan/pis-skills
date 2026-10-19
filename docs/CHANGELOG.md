@@ -2,6 +2,18 @@
 
 just-fe 的反馈与处理记录在 `just-fe/todo.md`，两个 Skill 分开维护。
 
+## 2026-10-19 接入项目规则（以后端 SQL 规则为例）
+
+| # | 问题 / 需求 | 处理 | 落点 |
+|---|------|------|------|
+| 7 | 后端仓有按 `globs` 生效的项目规则（如 SQL 规则），但评审员卡没要求读，代码评审可能不对照红线；Claude Code 也不会自动加载 `.cursor/rules` | 评审员与开发共用规则明确：按评审对象 / 要改的文件找出匹配的项目规则逐条对照，违反时注明规则编号；架构师要把匹配规则落到方案里。规则原文仍只留在项目仓，不抄进 Skill | `roles/reviewer.md`、`roles/dev-rules.md`、`roles/fe-architect.md`、`roles/be-architect.md` |
+| 8 | 子 agent 不知道改哪些文件时该读哪条规则 | 画像「规范文件索引」新增「什么时候必读」列，由画像生成者按规则的 `globs` 填写 | `templates/profile-fe.md`、`templates/profile-be.md`、`roles/profiler.md` |
+| 10 | 项目规则的红线（违反即打回）在评分里没有一票否决的通道，只能按清单项自身严重度计 | 评审员可对违反规则红线的项加 `escalate: "critical"` + `rule` + `consequence`，`state.js` 按 critical 计分并一票否决；缺 rule / consequence 的回执不合格 | `roles/reviewer.md`、`tools/state.js`、`tests/just-flf/tools/state.test.js` |
+| 11 | 评审员不按规则给出的检查方法查；开发不自证 SQL 命中哪条索引 | 评审员按规则写的方法查（对照 DDL、看执行计划）；后端开发报告新增「SQL 与索引对照」（每条新增 / 修改 SQL 的列、命中索引及 DDL 位置、预计锁行、执行计划或「推断」） | `roles/reviewer.md`、`roles/be-developer.md` |
+| 12 | 规则里的点在各阶段没有落点：手写 SQL 不经租户插件、后台检索、FORCE INDEX、热点行分桶、定时任务分批、页码上限、数据源止损配置 | 清单：改 LOGIC-08、DATA-04、TXN-05，新增 ARCH-14、ARCH-15、TXN-06、PERF-07、IMPL-07；后端架构师、后端开发、接口设计师卡写明对应要求 | `checklists/*`、`roles/be-architect.md`、`roles/be-developer.md`、`roles/api-designer.md` |
+| 13 | 没有「已知问题」的概念，规则里的待修清单无处落地 | 画像新增「已知问题清单」位置与「数据源止损配置现状」，由画像生成者探测；需求梳理对照影响面，触碰已知问题就出决策卡（顺带修还是不修） | `templates/profile-*.md`、`roles/profiler.md`、`roles/analyst.md` |
+| 9 | 清单缺少通用 SQL 检查项 | 代码评审新增 ARCH-11（UPDATE / DELETE 锁范围）、ARCH-12（大表分页）、ARCH-13（扫描投影与跨租户扫描）、LOGIC-12（热点行最后写）、BLAST-06（索引在 DDL 中存在）；后端方案评审新增 DATA-06（查询形状对应索引）、PERF-06（后台检索不拖垮线上表） | `checklists/code.md`、`checklists/design-be.md` |
+
 ## 2026-10-18 just-flf 技能本体
 
 | # | 问题 / 需求 | 处理 | 落点 |

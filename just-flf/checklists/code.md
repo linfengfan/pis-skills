@@ -20,11 +20,17 @@ full 档分工：本泳道架构师 `DESIGN,ARCH,BLAST`；评审员 `LOGIC,ROBUS
 | ARCH-08 | ARCH | 分层职责正确：接入层不写业务，持久化细节不外泄，内部模型不跨模块传递 | major | be |
 | ARCH-09 | ARCH | 没有 N+1、循环内读写、无分页的全量加载，查询有可用索引 | major | be |
 | ARCH-10 | ARCH | 缓存 key 带隔离维度，有过期与击穿防护；事件发布与本地事务一致（如涉及） | major | be |
+| ARCH-11 | ARCH | UPDATE 与 DELETE 的 WHERE 命中唯一键或某个索引的最左前缀，不会扫表锁住大量行 | critical | be |
+| ARCH-12 | ARCH | 可能超过十万行的表分页：COUNT 有上界，深 offset 改游标，ORDER BY 的排序列在索引里且末尾带唯一列 | major | be |
+| ARCH-13 | ARCH | 定时任务、导出、列表等扫描类查询只投影需要的列；跨租户全量扫描有专用索引，按游标分批推进、批间不共享事务 | major | be |
+| ARCH-14 | ARCH | 后台检索不对大表做多列 OR 或前导通配 LIKE，关键字先在小表反查主键再 IN；没有筛选条件时不查大表全量 | major | be |
+| ARCH-15 | ARCH | 没有用 FORCE INDEX 之类的提示绑死执行计划；确需时只加在确定的条件分支并写明理由 | minor | be |
 | BLAST-01 | BLAST | 被修改文件的调用方仍然成立 | critical | all |
 | BLAST-02 | BLAST | 公共组件、公共模块、公共类型的改动列出了波及范围与回归点 | major | all |
 | BLAST-03 | BLAST | scope.json 的越界文件逐个判定：与需求无关的格式化、重构已回退或说明 | major | all |
 | BLAST-04 | BLAST | 接口与表结构的变更对旧数据、旧客户端兼容 | critical | all |
 | BLAST-05 | BLAST | 改动有对应测试，或给出了明确的人工验证点 | minor | all |
+| BLAST-06 | BLAST | 代码里引用的索引都能在仓库的 DDL 中找到，增量脚本已合回主 schema；改索引附改前改后的执行计划对比 | major | be |
 | LOGIC-01 | LOGIC | 条件判断方向与边界取值正确 | critical | all |
 | LOGIC-02 | LOGIC | 状态与数据联动同步（缓存失效、增删后总数与分页修正） | major | all |
 | LOGIC-03 | LOGIC | 并发与时序正确（await 遗漏、依赖未就绪、旧结果覆盖新结果） | critical | all |
@@ -32,10 +38,11 @@ full 档分工：本泳道架构师 `DESIGN,ARCH,BLAST`；评审员 `LOGIC,ROBUS
 | LOGIC-05 | LOGIC | 行为与需求验收标准一致 | critical | all |
 | LOGIC-06 | LOGIC | 响应式依赖完整，watch 与生命周期不重复执行，路由参数变化后重新取数 | major | fe |
 | LOGIC-07 | LOGIC | Mock 只存在于方案指定位置，可整体移除；联调后没有 Mock 残留 | minor | fe |
-| LOGIC-08 | LOGIC | 查询过滤条件完整（租户、空间、逻辑删除、状态） | critical | be |
+| LOGIC-08 | LOGIC | 查询过滤条件完整（租户、空间、逻辑删除、状态）；手写 SQL 显式写出框架插件会自动追加的条件 | critical | be |
 | LOGIC-09 | LOGIC | 事务边界正确，本应原子的写没有被拆开，事务内没有外部调用 | critical | be |
 | LOGIC-10 | LOGIC | 写接口幂等，状态机不允许非法跃迁 | critical | be |
 | LOGIC-11 | LOGIC | 金额与积分精度、时区与时间区间、批量分页游标处理正确 | major | be |
+| LOGIC-12 | LOGIC | 热点单行累加（额度、容量、余额、汇总）的更新是事务里最后一个写操作，批处理不整批放进一个事务 | major | be |
 | ROBUST-01 | ROBUST | 失败、空数据、极值、竞态都有落点 | major | all |
 | ROBUST-02 | ROBUST | 错误没有被静默吞掉或转成成功兜底值 | critical | all |
 | ROBUST-03 | ROBUST | 定时器、监听、订阅、流、连接等资源都被释放 | critical | all |

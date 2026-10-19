@@ -133,6 +133,31 @@ test('评审回执漏判清单项、critical 通过不写 evidence → 退出码
   assert.match(errs, /SEC-01 是 critical，判 pass 必须写 evidence/)
 })
 
+test('项目规则红线可把 major 项升级为 critical → 一票否决', () => {
+  const ctx = setup()
+  triageToDev(ctx)
+  const { r } = reviewWith(ctx, items => {
+    Object.assign(items.find(it => it.id === 'ARCH-01'), {
+      verdict: 'fail', location: 'src/a.vue:10', fix: '拆分', escalate: 'critical', rule: 'fe-rules.mdc R3', consequence: '首屏卡顿',
+    })
+  })
+  ok(r)
+  const sc = ok(st(['score', '--dir', ctx.d, '--stage', 'review', '--lane', 'fe', '--expect', 'all']))
+  assert.equal(sc.passed, false)
+  assert.deepEqual(sc.criticalFails, ['ARCH-01'])
+  assert.match(sc.fails[0].severity, /fe-rules\.mdc R3 红线升级/)
+})
+
+test('escalate 缺少 rule → 回执不合格', () => {
+  const ctx = setup()
+  triageToDev(ctx)
+  const { r } = reviewWith(ctx, items => {
+    Object.assign(items.find(it => it.id === 'ARCH-01'), { verdict: 'fail', location: 'x:1', fix: 'y', escalate: 'critical', consequence: 'z' })
+  })
+  assert.equal(r.code, 1)
+  assert.match(r.json.errors.join(), /escalate 必须写 rule/)
+})
+
 test('评审员缺失 → 无法完成，不计分', () => {
   const ctx = setup()
   triageToDev(ctx)

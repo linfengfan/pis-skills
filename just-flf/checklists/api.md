@@ -19,6 +19,7 @@
 | IMPL-04 | IMPL | 每个写接口写明幂等键来源与重复提交的预期行为 | critical | all |
 | IMPL-05 | IMPL | 变更接口保证旧客户端不被破坏（新增字段可空、不删字段、不改语义），否则给出过渡方案 | critical | all |
 | IMPL-06 | IMPL | 能在现有分层与数据模型上实现，需要新增网关路由的已标注 | major | all |
+| IMPL-07 | IMPL | 列表接口写明 pageSize 与页码上限，数据量可能很大的列表提供游标分页；后台检索接口要求至少一个有选择性的筛选条件 | major | all |
 | DOC-01 | DOC | 每个字段都有类型、是否必填、可空、校验规则、说明、示例，嵌套对象逐层展开 | major | all |
 | DOC-02 | DOC | api JSON 与字段表逐字段一致（名称、类型、required、nullable），type 取自封闭集合 | critical | all |
 | DOC-03 | DOC | 请求侧每个路径参数与必填字段都有 example | major | all |

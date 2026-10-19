@@ -378,6 +378,11 @@ function validateReviewerItems(r, o, errors, record) {
     if (it.verdict === 'fail' && a.severity === 'critical' && !isStr(it.consequence)) errors.push(`${a.id} 是 critical，判 fail 必须写 consequence`)
     if (it.verdict === 'pass' && a.severity === 'critical' && !isStr(it.evidence)) errors.push(`${a.id} 是 critical，判 pass 必须写 evidence（查了哪里）`)
     if (it.verdict === 'na' && !isStr(it.reason)) errors.push(`${a.id} 判 na 必须写 reason`)
+    if (it.escalate !== undefined) {
+      if (it.escalate !== 'critical') errors.push(`${a.id} 的 escalate 只能是 "critical"`)
+      else if (it.verdict !== 'fail') errors.push(`${a.id} 只有判 fail 时才能 escalate`)
+      else if (!isStr(it.rule) || !isStr(it.consequence)) errors.push(`${a.id} escalate 必须写 rule（规则文件与编号）与 consequence`)
+    }
   }
   if (groups.includes('BLAST')) {
     if (!isStr(r.changeSummary)) errors.push('负责 BLAST 组时必须给 changeSummary')
@@ -519,12 +524,14 @@ function cmdScore(o) {
         const checklist = parseChecklist(r.assignment.checklist)
         for (const it of JSON.parse(fs.readFileSync(r.items, 'utf8'))) {
           const meta = checklist[it.id]
-          const w = WEIGHT[meta.severity]
+          const severity = it.escalate === 'critical' ? 'critical' : meta.severity
+          const w = WEIGHT[severity]
           if (it.verdict === 'na') continue
           totalW += w
           if (it.verdict === 'pass') { passW += w; continue }
-          res.fails.push({ reviewer: r.reviewer, id: it.id, severity: meta.severity, text: meta.text, location: it.location, fix: it.fix, consequence: it.consequence || '' })
-          if (meta.severity === 'critical') res.criticalFails.push(it.id)
+          const label = it.escalate === 'critical' ? `critical（${it.rule} 红线升级）` : severity
+          res.fails.push({ reviewer: r.reviewer, id: it.id, severity: label, text: meta.text, location: it.location, fix: it.fix, consequence: it.consequence || '' })
+          if (severity === 'critical') res.criticalFails.push(it.id)
         }
       } else {
         for (const c of JSON.parse(fs.readFileSync(r.criteria, 'utf8'))) {
